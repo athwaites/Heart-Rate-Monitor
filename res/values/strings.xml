@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Heart Rate Monitor</string>
+    <string name="UI_Start">START</string>
+    <string name="UI_Stop">STOP</string>
+	<string name="ANT_Radio_Service_Required">ANT Radio Service must be installed to use the ANT hardware.</string>
+	<string name="ANT_Not_Supported">ANT not supported</string>
+	<string name="ANT_Airplane_Mode">Airplane mode active</string>
+	<string name="ANT_Enabling">Enabling ANT …</string>
+	<string name="ANT_Disabling">Disabling ANT …</string>
+	<string name="ANT_Disabled">ANT disabled</string>
+	<string name="ANT_In_Use">ANT already in use</string>
+	<string name="ANT_Error">ANT error</string>
+	<string name="Notify_Started">Heart rate monitoring started.</string>
+	<string name="Notify_Started_Body">Heart rate monitoring is active.</string>
+	<string name="UI_Connection">Connection</string>
+	<string name="UI_Heart_Rate">Heart Rate</string>
+	<string name="UI_Time_Elapsed">Time Elapsed</string>
+	<string name="UI_Signal_Strength">Signal Strength</string>
+	<string name="Default_Value">--</string>
+	<string name="Heart_Rate_Units">bpm</string>
+	<string name="Time_Delimiter">:</string>
+	<string name="Signal_Units">%</string>
+	<string name="Signal_Delimiter">/</string>
+	<string name="Status_Disconnected">Disconnected</string>
+	<string name="Status_Connecting">Connecting</string>
+	<string name="Status_Connected">Connected</string>
+	<string name="Status_Closed">Click icon to connect</string>
+	<string name="Status_Offline">HR sensor disconnected</string>
+	<string name="Status_Opening">Opening ANT+ connection</string>
+	<string name="Status_Searching">Searching for ANT+ HR sensor</string>
+	<string name="Status_Opened">Click icon to disconnect</string>
+	<string name="Status_Error">Unknown error</string>
+	
+</resources>

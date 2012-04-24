@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="fill_parent"
+    android:background="#ffe0e0e0"
+    android:orientation="vertical" >
+
+    <LinearLayout
+      android:orientation="horizontal"
+      android:layout_width="fill_parent"
+      android:layout_height="fill_parent"
+      android:padding="20dip"
+      android:layout_weight="1"
+      android:gravity="center" >
+      
+        <LinearLayout
+            android:id="@+id/button_heart"
+            android:orientation="horizontal"
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            android:padding="20dip"
+            android:gravity="center"
+            android:background="@drawable/custom_button"
+            android:clickable="true"
+            android:onClick="onClick" >
+
+            <ImageView
+                android:id="@+id/icon_heart"
+                android:adjustViewBounds="true"
+                android:maxWidth="60dip"
+                android:maxHeight="60dip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/UI_Heart_Rate"
+                android:src="@drawable/ic_heart" />
+        
+            <TextView
+                android:id="@+id/text_heart"
+                android:layout_width="fill_parent"
+                android:layout_height="fill_parent"
+                android:gravity="center_vertical|right"
+                android:textColor="#ff000000"
+                android:textSize="32sp" />
+        
+        </LinearLayout>
+        
+    </LinearLayout>
+    
+    <LinearLayout
+      android:orientation="horizontal"
+      android:layout_width="fill_parent"
+      android:layout_height="fill_parent"
+      android:padding="20dip"
+      android:layout_weight="1"
+      android:gravity="center" >
+      
+        <LinearLayout
+            android:id="@+id/button_signal"
+            android:orientation="horizontal"
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            android:padding="20dip"
+            android:gravity="center"
+            android:background="@drawable/custom_button"
+            android:clickable="true"
+            android:onClick="onClick" >
+        
+            <ImageView
+                android:id="@+id/icon_signal"
+                android:adjustViewBounds="true"
+                android:maxWidth="60dip"
+                android:maxHeight="60dip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/UI_Signal_Strength"
+                android:src="@drawable/ic_signal" />
+        
+            <TextView
+                android:id="@+id/text_signal"
+                android:layout_width="fill_parent"
+                android:layout_height="fill_parent"
+                android:gravity="center_vertical|right"
+                android:textColor="#ff000000"
+                android:textSize="32sp" />
+        
+        </LinearLayout>
+        
+    </LinearLayout>
+        <LinearLayout
+      android:orientation="horizontal"
+      android:layout_width="fill_parent"
+      android:layout_height="fill_parent"
+      android:padding="20dip"
+      android:layout_weight="1"
+      android:gravity="center" >
+      
+        <LinearLayout
+            android:id="@+id/button_time"
+            android:orientation="horizontal"
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            android:padding="20dip"
+            android:gravity="center"
+            android:background="@drawable/custom_button"
+            android:clickable="true"
+            android:onClick="onClick" >
+        
+            <ImageView
+                android:id="@+id/icon_time"
+                android:adjustViewBounds="true"
+                android:maxWidth="60dip"
+                android:maxHeight="60dip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/UI_Time_Elapsed"
+                android:src="@drawable/ic_time" />
+        
+            <TextView
+                android:id="@+id/text_time"
+                android:layout_width="fill_parent"
+                android:layout_height="fill_parent"
+                android:gravity="center_vertical|right"
+                android:textColor="#ff000000"
+                android:textSize="32sp" />
+        
+        </LinearLayout>
+        
+    </LinearLayout>
+    
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:padding="20dip"
+        android:layout_weight="1"
+        android:gravity="center" >
+
+        <ImageView
+            android:id="@+id/button_connection"
+            android:adjustViewBounds="true"
+            android:maxWidth="100dip"
+            android:maxHeight="100dip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:background="@drawable/connection_button"
+            android:contentDescription="@string/UI_Connection"
+            android:src="@drawable/ic_disconnected" 
+            android:onClick="onClick" />
+        
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            android:padding="10dip"
+            android:gravity="center"
+            android:textColor="#ff000000" />
+        
+    </LinearLayout>
+    
+</LinearLayout>
