@@ -2,40 +2,45 @@
                              ------------------
 
    Description
-	
+
       This is a Heart Rate Monitor app for use with ANT+ Heart Rate Sensors
       on the Android 2.3 (Gingerbread) platform.
-	  
+
       Rather than other apps that simply report the current heart rate and a
       final average, Heart Rate Monitor will provide beat-by-beat logging and
       reporting, including session performance statistics.
-	    
+
    Documentation
-	
+
       Please refer to the project Wiki at:
-         
+
          http://github.com/athwaites/Heart-Rate-Monitor/wiki
-	
-   Software Requirements
-	
-      1. ANT+ Radio Service (free download on Google Play)
-      2. Depending on your handset you may need a vendor-specific ANT+ app
-	
+
    Hardware Requirements
-	
+
       1. Android 2.3 (Gingerbread) Handset
       2. ANT+ Connectivity
       3. ANT+ Heart Rate Sensor
+
+   Software Requirements
+
+      1. "ANT+ Radio Service" on handset (free download on Google Play)
+      2. Depending on handset, may require a vendor-specific ANT+ app
+      
+   Build Environment
+
+      1. JDK 6 or higher (compiler compliance level set to 1.6 or higher)
+      2. Android 2.3.3 SDK (API10)
 
    Contact
 
       Please provide any feedback, including suggestions and bug reports 
       via the project page at GitHub (requires free registration):
-	     
+
          http://github.com/athwaites/Heart-Rate-Monitor
-   
+
    Licensing
-	
+
       Copyright 2012 Adam Thwaites
 
       Licensed under the Apache License, Version 2.0 (the "License");
