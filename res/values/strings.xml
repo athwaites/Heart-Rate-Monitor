@@ -21,8 +21,9 @@
 	<string name="Default_Value">--</string>
 	<string name="Heart_Rate_Units">bpm</string>
 	<string name="Time_Delimiter">:</string>
-	<string name="Signal_Units">%</string>
+	<string name="Signal_RSSI_Units">dBm</string>
 	<string name="Signal_Delimiter">/</string>
+	<string name="Signal_Throughput_Units">%</string>
 	<string name="Status_Disconnected">Disconnected</string>
 	<string name="Status_Connecting">Connecting</string>
 	<string name="Status_Connected">Connected</string>
@@ -32,5 +33,9 @@
 	<string name="Status_Searching">Searching for ANT+ HR sensor</string>
 	<string name="Status_Opened">Click icon to disconnect</string>
 	<string name="Status_Error">Unknown error</string>
+	<string name="Status_Pairing_Reset">ANT+ pairing reset</string>
+	<string name="Confirm_Pairing_Reset">Are you sure you want to reset the ANT+ pairing?</string>
+	<string name="Positive_Response">Yes</string>
+	<string name="Negative_Response">No</string>
 	
 </resources>

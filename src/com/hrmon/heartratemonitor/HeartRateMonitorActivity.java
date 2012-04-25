@@ -4,7 +4,9 @@ import java.text.DecimalFormat;
 import java.text.NumberFormat;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ComponentName;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
@@ -13,10 +15,12 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.View.OnLongClickListener;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-public class HeartRateMonitorActivity extends Activity implements View.OnClickListener, ConnectionManager.Callbacks {
+public class HeartRateMonitorActivity extends Activity implements ConnectionManager.Callbacks {
 	
 	/** The Log Tag. */
 	public static final String TAG = "HRMon - App";
@@ -26,6 +30,9 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
 	
 	/** Manager for the ANT+ connection. */
 	private ConnectionManager mConnectionManager;
+	
+	/** Boolean flag to indicate if ANT+ pairing was recently reset. */
+	private boolean mPairingReset;
 	
 	/** Pair to any device. */
 	static final short WILDCARD = 0;
@@ -57,8 +64,15 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
 	/** Current packet throughput */
 	private int mThroughput;
 	
+	/** Packets received in this session */
+	private long mPacketsReceived;
+	
+	/** Packets dropped in this session */
+	private long mPacketsDropped;
+	
 	/** Heart Rate Monitor state enumeration */
 	private enum eHRMState {
+		CS_RESET,
 		CS_CLOSED,
 		CS_OFFLINE,
 		CS_OPENING,
@@ -100,7 +114,10 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        
         setContentView(R.layout.main);
+        setListenerMethods();
+        
         clearSession();
         displayStatus();
         displayData();
@@ -129,6 +146,25 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
     }
     
     /**
+     * Set the listener methods for the UI elements
+     */
+    private void setListenerMethods()
+    {
+    	// Heart Button
+    	findViewById(R.id.button_heart).setOnClickListener(mClickListener);
+    	
+    	// Signal Button
+    	findViewById(R.id.button_signal).setOnClickListener(mClickListener);
+    	
+    	// Time Button
+    	findViewById(R.id.button_time).setOnClickListener(mClickListener);
+    	
+    	// Connection Button    	
+    	findViewById(R.id.button_connection).setOnClickListener(mClickListener);
+    	findViewById(R.id.button_connection).setOnLongClickListener(mLongClickListener);
+    }
+    
+    /**
      * Clear the session data to prepare for a new session
      */
     private void clearSession()
@@ -138,7 +174,10 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
     	mTimeElapsed = 0;
     	mRSSI = 0;
     	mThroughput = 0;
+    	mPacketsReceived = 0;
+    	mPacketsDropped = 0;
     	mTimerEnabled = false;
+    	mPairingReset = false;
     }
     
     /**
@@ -159,7 +198,7 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
     {
     	TextView t = ((TextView)findViewById(R.id.text_heart));
     	
-    	if (mHRMState != eHRMState.CS_OPENED) {
+    	if (mConnectionManager == null) {
     		t.setText(getString(R.string.Default_Value) + " " + units);
     	} else {
     		t.setText(valHR + " " + units);
@@ -173,7 +212,7 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
      */
     private void displaySignal(int RSSI, int throughput)
     {
-    	displaySignal(RSSI, throughput, getString(R.string.Signal_Units));
+    	displaySignal(RSSI, getString(R.string.Signal_RSSI_Units), throughput, getString(R.string.Signal_Throughput_Units));
     }
     
     /**
@@ -182,20 +221,20 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
      * @param throughput    value representing the packet throughput in the units specified
      * @param units         string describing the signal quality units (e.g. "%")
      */
-    private void displaySignal(int RSSI, int throughput, String units)
+    private void displaySignal(int RSSI, String unitsRSSI, int throughput, String unitsThroughput)
     {
     	TextView t = ((TextView)findViewById(R.id.text_signal));
     	
-    	if (mHRMState != eHRMState.CS_OPENED) {
+    	if (mConnectionManager == null) {
     		t.setText(
-    			getString(R.string.Default_Value) + units + " " +
+    			getString(R.string.Default_Value) + " " + unitsRSSI + " " +
         		getString(R.string.Signal_Delimiter) + " " +
-        		getString(R.string.Default_Value) + units);
+        		getString(R.string.Default_Value) + " " + unitsThroughput);
     	} else {
     		t.setText(
-    			RSSI + units + " " +
+    			RSSI + " " + unitsRSSI + " " +
     		    getString(R.string.Signal_Delimiter) + " " +
-    		    throughput + units);
+    		    throughput + " " + unitsThroughput);
     	}
     }
     
@@ -228,7 +267,7 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
     	TextView t = ((TextView)findViewById(R.id.text_time));
     	NumberFormat time = new DecimalFormat("#00");
     	
-    	if (mHRMState != eHRMState.CS_OPENED) {
+    	if (mConnectionManager == null) {
     		t.setText(
     			getString(R.string.Default_Value) +
         		getString(R.string.Time_Delimiter) +
@@ -271,6 +310,16 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
     	}
     	
     	switch (mHRMState) {
+    		case CS_RESET:
+    			imgRes = R.drawable.ic_disconnected;
+    			str = getString(R.string.Status_Disconnected);
+    			str = str + "\n\n";
+    			if (antState == null) {
+    				str = str + getString(R.string.Status_Pairing_Reset);
+    			} else {
+    				str = str + antState;
+    			}
+    			break;
     		case CS_CLOSED:
     			imgRes = R.drawable.ic_disconnected;
     			str = getString(R.string.Status_Disconnected);
@@ -351,7 +400,65 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
        SharedPreferences settings = getSharedPreferences(PREFS_NAME, 0);
        mConnectionManager.setDeviceNumberHRM((short) settings.getInt("DeviceNumberHRM", WILDCARD));
        mConnectionManager.setProximityThreshold((byte) settings.getInt("ProximityThreshold", DEFAULT_BIN));
-       mConnectionManager.setBufferThreshold((short) settings.getInt("BufferThreshold", DEFAULT_BUFFER_THRESHOLD));
+       mConnectionManager.setBufferThreshold((short) settings.getInt("BufferThreshold", DEFAULT_BUFFER_THRESHOLD));       
+    }
+    
+    /**
+     * Delete application persistent data.
+     */
+    private void deleteConfiguration()
+    {
+    	// Clear application persistent data
+    	SharedPreferences.Editor editor = getSharedPreferences(PREFS_NAME, 0).edit();
+    	editor.clear();
+    	editor.commit();
+    }
+    
+    /**
+     * Reset application persistent data to default.
+     */
+    private void resetConfiguration()
+    {
+    	deleteConfiguration();
+    	loadConfiguration();
+    }
+    
+    /**
+     * Reset the ANT+ connection pairing.
+     */
+    private void resetPairing()
+    {
+    	mPairingReset = true;
+    	
+    	disconnectSensor();
+    	
+    	mConnectionManager.setDeviceNumberHRM(WILDCARD);
+        mConnectionManager.setProximityThreshold(DEFAULT_BIN);
+        mConnectionManager.setBufferThreshold(DEFAULT_BUFFER_THRESHOLD);
+        
+        updateState();
+    }
+    
+    /**
+     * Confirm the user wants to reset the ANT+ connection pairing. 
+     */
+    private void confirmPairingReset()
+    {
+    	AlertDialog.Builder builder = new AlertDialog.Builder(this);
+    	builder.setMessage(getString(R.string.Confirm_Pairing_Reset))
+    	       .setCancelable(false)
+    	       .setPositiveButton(getString(R.string.Positive_Response), new DialogInterface.OnClickListener() {
+    	           public void onClick(DialogInterface dialog, int id) {
+    	                HeartRateMonitorActivity.this.resetPairing();
+    	           }
+    	       })
+    	       .setNegativeButton(getString(R.string.Negative_Response), new DialogInterface.OnClickListener() {
+    	           public void onClick(DialogInterface dialog, int id) {
+    	                dialog.cancel();
+    	           }
+    	       });
+    	AlertDialog alert = builder.create();
+    	alert.show();
     }
     
     /**
@@ -376,7 +483,9 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
     	clearSession();
 
 		// Enable ANT+
-    	mConnectionManager.doEnable();
+    	if (!mConnectionManager.isEnabled()) {
+    	    mConnectionManager.doEnable();
+    	}
     	
     	// Open HRM channel
     	// (reset on all attempts; otherwise would call 
@@ -403,7 +512,9 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
         }
     	
     	// Disable ANT+
-    	mConnectionManager.doDisable();
+    	if (mConnectionManager.isEnabled()) {
+    	    mConnectionManager.doDisable();
+    	}
     }
     
     /**
@@ -460,7 +571,20 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
      */
     private void updateSignal()
     {
+    	mPacketsReceived += mConnectionManager.getPacketsReceived();
+    	mPacketsDropped += mConnectionManager.getPacketsDropped();
+    	long totalPackets = mPacketsReceived + mPacketsDropped;
     	
+    	Log.d(TAG, "PacketsReceived: " + mPacketsReceived);
+    	Log.d(TAG, "PacketsDropped: " + mPacketsDropped);
+    	
+    	if (totalPackets > 0) {
+    		mThroughput = (int)((100 * mPacketsReceived) / (totalPackets));
+    	} else {
+    		mThroughput = 0;
+    	}
+    	
+    	mRSSI = mConnectionManager.getRSSI();
     }
     
     /**
@@ -492,7 +616,11 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
 	    	switch (mConnectionManager.getHrmState()) {
 	        case CLOSED:
 	        	// Disconnected
-	        	mHRMState = eHRMState.CS_CLOSED;
+	        	if (mPairingReset) {
+	        		mHRMState = eHRMState.CS_RESET;
+	        	} else {
+	        		mHRMState = eHRMState.CS_CLOSED;
+	        	}
 	            break;
 	        case OFFLINE:
 	        	// Disconnected (No sensor)
@@ -504,6 +632,7 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
 	            break;
 	        case PENDING_OPEN:
 	        	// Connecting (Enabling ANT+)
+	        	mPairingReset = false;
 	        	mHRMState = eHRMState.CS_OPENING;
 	            break;
 	        case TRACKING_STATUS:
@@ -534,7 +663,41 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
     	displayStatus();
     }
     
-    /** Called when a view is clicked. */
+    /**
+     * Called when a view is clicked.
+     */
+    private OnClickListener mClickListener = new OnClickListener()
+    {
+		
+		@Override
+		public void onClick(View v)
+		{
+			if (mConnectionManager == null) {
+	    		return;
+	    	}
+	    	
+	    	switch (v.getId()) {
+	    	    case R.id.button_connection:
+	    	    	// Toggle the ANT+ connection
+	    	    	toggleConnection();
+	    		    break;
+	    	    case R.id.button_heart:
+	    	    	// Show heart rate graph for current session.
+	    	    	// Not implemented yet
+	    		    break;
+	    	    case R.id.button_signal:
+	    	    	// Show signal quality graph for current session.
+	    	    	// Not implemented yet
+	    		    break;
+	    	    case R.id.button_time:
+	    	    	// Show time option activity (e.g. restart, set time limit, etc.)
+	    	    	// Not implemented yet
+	    		    break;
+	    	}
+		}
+		
+	};
+	/*
     public void onClick(View v)
     {
     	if (mConnectionManager == null) {
@@ -560,7 +723,47 @@ public class HeartRateMonitorActivity extends Activity implements View.OnClickLi
     		    break;
     	}
     }
+    */
     
+    /**
+     * Called when a view is long-clicked.
+     */
+	private OnLongClickListener mLongClickListener = new OnLongClickListener()
+	{
+		@Override
+		public boolean onLongClick(View v)
+		{
+			if (mConnectionManager == null) {
+	    		return false;
+	    	}
+	    	
+	    	switch (v.getId()) {
+	    	case R.id.button_connection:
+	    		// Reset the ANT+ pairing
+	    		confirmPairingReset();
+	    		break;
+	    	}
+	    	
+	    	return true;
+		}
+	};
+	/*
+	public boolean onLongClick(View v)
+	{
+		if (mConnectionManager == null) {
+    		return false;
+    	}
+    	
+    	switch (v.getId()) {
+    	case R.id.button_connection:
+    		// Reset the ANT+ pairing
+    		confirmPairingReset();
+    		break;
+    	}
+    	
+    	return true;
+	}
+	*/
     
     // ConnectionManager callback implementations
 

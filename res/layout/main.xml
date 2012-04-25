@@ -2,9 +2,28 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="fill_parent"
-    android:background="#ffe0e0e0"
+    android:background="@drawable/background_pattern"
     android:orientation="vertical" >
 
+    <LinearLayout
+      android:orientation="horizontal"
+      android:layout_width="fill_parent"
+      android:layout_height="wrap_content"
+      android:padding="10dip"
+      android:gravity="center_vertical|left"
+      android:background="@drawable/header_frame" >
+      
+        <TextView
+          android:id="@+id/text_header"
+          android:layout_width="fill_parent"
+          android:layout_height="fill_parent"
+          android:gravity="center_vertical|left"
+          android:textColor="#ff000000"
+          android:textSize="24sp"
+          android:text="@string/app_name" />
+      
+    </LinearLayout>
+    
     <LinearLayout
       android:orientation="horizontal"
       android:layout_width="fill_parent"
@@ -21,14 +40,13 @@
             android:padding="20dip"
             android:gravity="center"
             android:background="@drawable/custom_button"
-            android:clickable="true"
-            android:onClick="onClick" >
+            android:clickable="true" >
 
             <ImageView
                 android:id="@+id/icon_heart"
                 android:adjustViewBounds="true"
-                android:maxWidth="60dip"
-                android:maxHeight="60dip"
+                android:maxWidth="40dip"
+                android:maxHeight="40dip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:contentDescription="@string/UI_Heart_Rate"
@@ -40,7 +58,7 @@
                 android:layout_height="fill_parent"
                 android:gravity="center_vertical|right"
                 android:textColor="#ff000000"
-                android:textSize="32sp" />
+                android:textSize="24sp" />
         
         </LinearLayout>
         
@@ -62,14 +80,13 @@
             android:padding="20dip"
             android:gravity="center"
             android:background="@drawable/custom_button"
-            android:clickable="true"
-            android:onClick="onClick" >
+            android:clickable="true" >
         
             <ImageView
                 android:id="@+id/icon_signal"
                 android:adjustViewBounds="true"
-                android:maxWidth="60dip"
-                android:maxHeight="60dip"
+                android:maxWidth="40dip"
+                android:maxHeight="40dip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:contentDescription="@string/UI_Signal_Strength"
@@ -81,7 +98,7 @@
                 android:layout_height="fill_parent"
                 android:gravity="center_vertical|right"
                 android:textColor="#ff000000"
-                android:textSize="32sp" />
+                android:textSize="24sp" />
         
         </LinearLayout>
         
@@ -108,8 +125,8 @@
             <ImageView
                 android:id="@+id/icon_time"
                 android:adjustViewBounds="true"
-                android:maxWidth="60dip"
-                android:maxHeight="60dip"
+                android:maxWidth="40dip"
+                android:maxHeight="40dip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:contentDescription="@string/UI_Time_Elapsed"
@@ -121,7 +138,7 @@
                 android:layout_height="fill_parent"
                 android:gravity="center_vertical|right"
                 android:textColor="#ff000000"
-                android:textSize="32sp" />
+                android:textSize="24sp" />
         
         </LinearLayout>
         
@@ -143,10 +160,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:clickable="true"
+            android:longClickable="true"
             android:background="@drawable/connection_button"
             android:contentDescription="@string/UI_Connection"
-            android:src="@drawable/ic_disconnected" 
-            android:onClick="onClick" />
+            android:src="@drawable/ic_disconnected" />
         
         <TextView
             android:id="@+id/status"

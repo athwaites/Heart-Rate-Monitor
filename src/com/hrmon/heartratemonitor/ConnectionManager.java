@@ -117,6 +117,15 @@ public class ConnectionManager {
     /** Last measured BPM form the HRM device */
     private int mBPM = 0;
     
+    /** Last RSSI */
+    private int mRSSI = 0;
+    
+    /** Received packet count since get-request */
+    private long mPacketsReceived = 0;
+    
+    /** Dropped packet count since get-request */
+    private long mPacketsDropped = 0;
+    
     /** Flag indicating that opening of the HRM channel was deferred */
     private boolean mDeferredHrmStart = false;
     
@@ -301,6 +310,25 @@ public class ConnectionManager {
     public int getBPM()
     {
         return mBPM;
+    }
+    
+    public int getRSSI()
+    {
+    	return mRSSI;
+    }
+    
+    public long getPacketsReceived()
+    {
+    	long result = mPacketsReceived;
+    	mPacketsReceived = 0;
+    	return result;
+    }
+    
+    public long getPacketsDropped()
+    {
+    	long result = mPacketsDropped;
+    	mPacketsDropped = 0;
+    	return result;
     }
 
     public String getAntStateText()
@@ -691,7 +719,7 @@ public class ConnectionManager {
         } catch (AntInterfaceException e)
         {
             //Not much error recovery possible.
-            Log.e(TAG, "Could not enable ANT.");
+            Log.e(TAG, "Could not disable ANT.");
             return;
         }
     }
@@ -895,6 +923,10 @@ public class ConnectionManager {
                      if(channelNum == HRM_CHANNEL) {
                          antDecodeHRM(ANTRxMessage);
                      }
+                     
+                     // ANT received a message in the designated channel period
+                     mPacketsReceived++;
+                     
                      break;
                  case AntMesg.MESG_BURST_DATA_ID:
                      break;
@@ -963,6 +995,11 @@ public class ConnectionManager {
                    Log.i(TAG, "Stopping service.");
                    mContext.stopService(new Intent(mContext, HeartRateMonitorService.class));
                }
+           }
+           
+           if ((ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 1] == AntMesg.MESG_EVENT_ID) && (ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 2] == AntDefine.EVENT_RX_FAIL)) {
+        	   // ANT failed to receive a message in the designated channel period
+        	   mPacketsDropped++;
            }
            
            if (channelConfig.isInitializing)
@@ -1103,7 +1140,7 @@ public class ConnectionManager {
          
          if(mHrmState != ChannelStates.CLOSED)
          {
-            Log.d(TAG, "antDecodeHRMM: Tracking data");
+            Log.d(TAG, "antDecodeHRM: Tracking data");
 
             mHrmState = ChannelStates.TRACKING_DATA;
             if(mCallbackSink != null)
@@ -1124,6 +1161,7 @@ public class ConnectionManager {
          }
 
          // Monitor page toggle bit
+         // TODO: Check this, it looks like the default code creates a terminal state in EXT once transitioned; not a problem if we're only after BPM since it's available on all state pages.
          if(mStateHRM != HRMStatePage.EXT)
          {
             if(mStateHRM == HRMStatePage.INIT)
@@ -1144,6 +1182,11 @@ public class ConnectionManager {
                   mStateHRM = HRMStatePage.EXT;
             }
          }
+         
+         // TODO: Extract RSSI from packet here
+         // RSSI is in extended packet region, and must be requested by setting the extended flag byte (0x80 | 0x40)
+         // Normal method of doing this is to call ANTLibConfig(), but the ANT+ Android API does not currently provide this
+         // Could use low-level command packets to configure in meantime?
          
          // Heart rate available in all pages and regardless of toggle bit            
          mBPM = ANTRxMessage[10] & 0xFF;
