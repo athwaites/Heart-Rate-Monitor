@@ -4,7 +4,7 @@
         <shape
             android:shape="oval" >
             <solid 
-                android:color="#f0808080" />
+                android:color="#f039b54a" />
             <padding
                 android:left="10dp"
                 android:top="10dp"
@@ -17,7 +17,7 @@
         <shape
             android:shape="oval" >
             <solid 
-                android:color="#40808080" />
+                android:color="#4039b54a" />
             <padding
                 android:left="10dp"
                 android:top="10dp"
@@ -30,7 +30,7 @@
         <shape
             android:shape="oval" >
             <solid 
-                android:color="#80808080" />
+                android:color="#8039b54a" />
             <padding
                 android:left="10dp"
                 android:top="10dp"

@@ -25,14 +25,20 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
 	/** The Log Tag. */
 	public static final String TAG = "HRMon - App";
 
+	/** Update interval */
+	public static final long UPDATE_INTERVAL_MILLISEC = 500;
+	
 	/** Boolean flag to indicate if ANT+ service is bound to this activity. */
 	private boolean mBound;
 	
 	/** Manager for the ANT+ connection. */
 	private ConnectionManager mConnectionManager;
 	
+	/** Manager for the ANT+ connection. */
+	private MonitorSession mMonitorSession;
+	
 	/** Boolean flag to indicate if ANT+ pairing was recently reset. */
-	private boolean mPairingReset;
+	private boolean mPairingReset = false;
 	
 	/** Pair to any device. */
 	static final short WILDCARD = 0;
@@ -45,30 +51,6 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
 	   
 	/** Shared preferences data filename. */
 	public static final String PREFS_NAME = "HRMonPrefs";
-	
-	/** Time limit (24h, in seconds) */
-	public static final long SESSION_TIMELIMIT = (86400);
-	
-	/** Current heart rate */
-	private int mHR;
-	
-	/** Current time started in milliseconds */
-	private long mTimeStarted;
-	
-	/** Current time elapsed in seconds */
-	private long mTimeElapsed;
-	
-	/** Current received signal strength indicator */
-	private int mRSSI;
-	
-	/** Current packet throughput */
-	private int mThroughput;
-	
-	/** Packets received in this session */
-	private long mPacketsReceived;
-	
-	/** Packets dropped in this session */
-	private long mPacketsDropped;
 	
 	/** Heart Rate Monitor state enumeration */
 	private enum eHRMState {
@@ -85,12 +67,9 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
 	private eHRMState mHRMState = eHRMState.CS_CLOSED;
 	
 	/** Handler for timer */
-	private Handler mHandler = new Handler();
+	private Handler mTimer = new Handler();
 	
-	/** Boolean flag to indicate if the timer is enabled */
-	private boolean mTimerEnabled; 
-	
-	/** Bind the ANT+ Service. */
+	/** Bind the service. */
 	private final ServiceConnection mConnection = new ServiceConnection()
 	{
 	    @Override
@@ -98,6 +77,7 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
 	    {
 	    	mConnectionManager.setCallbacks(null);
 	    	mConnectionManager = null;
+	    	mMonitorSession = null;
 	    }
 	        
 	    @Override
@@ -105,6 +85,7 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
 	    {
 	    	mConnectionManager = ((HeartRateMonitorService.LocalBinder)service).getManager();
 	    	mConnectionManager.setCallbacks(HeartRateMonitorActivity.this);
+	    	mMonitorSession = ((HeartRateMonitorService.LocalBinder)service).getSession();
 	        loadConfiguration();
 	        notifyAntStateChanged();
 	    }
@@ -117,8 +98,7 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
         
         setContentView(R.layout.main);
         setListenerMethods();
-        
-        clearSession();
+
         displayStatus();
         displayData();
     }
@@ -165,22 +145,6 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     }
     
     /**
-     * Clear the session data to prepare for a new session
-     */
-    private void clearSession()
-    {
-    	// Clear session-scoped variables here
-    	mHR = 0;
-    	mTimeElapsed = 0;
-    	mRSSI = 0;
-    	mThroughput = 0;
-    	mPacketsReceived = 0;
-    	mPacketsDropped = 0;
-    	mTimerEnabled = false;
-    	mPairingReset = false;
-    }
-    
-    /**
      * Display the Heart Rate
      * @param valHR     value representing the heart rate in the default units
      */
@@ -198,11 +162,7 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     {
     	TextView t = ((TextView)findViewById(R.id.text_heart));
     	
-    	if (mConnectionManager == null) {
-    		t.setText(getString(R.string.Default_Value) + " " + units);
-    	} else {
-    		t.setText(valHR + " " + units);
-    	}
+   		t.setText(valHR + " " + units);
     }
     
     /**
@@ -225,33 +185,30 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     {
     	TextView t = ((TextView)findViewById(R.id.text_signal));
     	
-    	if (mConnectionManager == null) {
-    		t.setText(
-    			getString(R.string.Default_Value) + " " + unitsRSSI + " " +
-        		getString(R.string.Signal_Delimiter) + " " +
-        		getString(R.string.Default_Value) + " " + unitsThroughput);
-    	} else {
-    		t.setText(
-    			RSSI + " " + unitsRSSI + " " +
-    		    getString(R.string.Signal_Delimiter) + " " +
-    		    throughput + " " + unitsThroughput);
-    	}
+		t.setText(
+			RSSI + " " + unitsRSSI + " " +
+		    getString(R.string.Signal_Delimiter) + " " +
+		    throughput + " " + unitsThroughput);
     }
     
     /**
      * Display the Elapsed Time
-     * @param time   value representing the elapsed time in seconds
+     * @param time   value representing the elapsed time in milliseconds
      */
     private void displayTime(long time)
     {
     	int hours;
     	int minutes;
     	int seconds;
+    	int milliseconds;
 
+    	milliseconds = (int)(time % 1000);
+    	time = (time - milliseconds) / 1000;
 		seconds = (int)(time % 60);
 		time = (time - seconds) / 60;
 		minutes = (int)(time % 60);
-		hours = (int)((time - minutes) / 60);
+		time = (time - minutes) / 60;
+		hours = (int)time;
 		
 		displayTime(hours, minutes, seconds);
     }
@@ -267,21 +224,12 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     	TextView t = ((TextView)findViewById(R.id.text_time));
     	NumberFormat time = new DecimalFormat("#00");
     	
-    	if (mConnectionManager == null) {
-    		t.setText(
-    			getString(R.string.Default_Value) +
-        		getString(R.string.Time_Delimiter) +
-        		getString(R.string.Default_Value) +
-        		getString(R.string.Time_Delimiter) +
-        		getString(R.string.Default_Value));
-    	} else {
-    		t.setText(
-    			time.format(hours) +
-            	getString(R.string.Time_Delimiter) +
-            	time.format(minutes) +
-            	getString(R.string.Time_Delimiter) +
-            	time.format(seconds));
-    	}
+		t.setText(
+			time.format(hours) +
+        	getString(R.string.Time_Delimiter) +
+        	time.format(minutes) +
+        	getString(R.string.Time_Delimiter) +
+        	time.format(seconds));
     }
     
     /**
@@ -289,9 +237,21 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
      */
     private void displayData()
     {
-    	displayHR(mHR);
-    	displayTime(mTimeElapsed);
-    	displaySignal(mRSSI, mThroughput);
+    	int curHR = 0;
+    	long curElapsedTime = 0;
+    	int curRSSI = 0;
+    	int curThroughput = 0;
+    	
+    	if (mMonitorSession != null) {
+    		curHR = mMonitorSession.getLastHR();
+        	curElapsedTime = mMonitorSession.getElapsedTime();
+        	curRSSI = mMonitorSession.getLastRSSI();
+        	curThroughput = mMonitorSession.getPacketThroughput();
+    	}
+    	
+    	displayHR(curHR);
+    	displayTime(curElapsedTime);
+    	displaySignal(curRSSI, curThroughput);
     }
     
     /**
@@ -466,12 +426,12 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
      */
     private void toggleConnection()
     {
-    	if (mConnectionManager.isEnabled()) {
-    		// Disconnect
-    		disconnectSensor();
-    	} else {
+    	if ((mHRMState == eHRMState.CS_CLOSED) || (mHRMState == eHRMState.CS_RESET)) {
     		// Connect
     		connectSensor();
+    	} else {
+    		// Disconnect
+    		disconnectSensor();
     	}
     }
     
@@ -480,8 +440,6 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
      */
     private void connectSensor()
     {
-    	clearSession();
-
 		// Enable ANT+
     	if (!mConnectionManager.isEnabled()) {
     	    mConnectionManager.doEnable();
@@ -518,22 +476,36 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     }
     
     /**
-     * Starts the timer
+     * Toggles the session.
      */
-    private void startTimer()
+    private void toggleSession()
     {
-    	mTimerEnabled = true;
-    	mTimeStarted = System.currentTimeMillis();
-    	mHandler.postDelayed(updateTime, 1000);
+    	if (mMonitorSession.isStarted()) {
+    		stopSession();
+    	} else {
+    		if (mHRMState == eHRMState.CS_OPENED) {
+    			startSession();
+    		}
+    	}
     }
     
     /**
-     * Stops the timer
+     * Starts the session.
      */
-    private void stopTimer()
+    private void startSession()
     {
-    	mTimerEnabled = false;
-    	mHandler.removeCallbacks(updateTime);
+    	mTimer.postDelayed(updateTime, UPDATE_INTERVAL_MILLISEC);
+    	mMonitorSession.clear();
+    	mMonitorSession.start();
+    }
+    
+    /**
+     * Stops the session.
+     */
+    private void stopSession()
+    {
+    	mTimer.removeCallbacks(updateTime);
+    	mMonitorSession.stop();
     }
     
     /**
@@ -541,7 +513,7 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
      */
     private void updateHR()
     {
-    	mHR = mConnectionManager.getBPM();
+    	mMonitorSession.addHR(mConnectionManager.getBPM());
     }
     
     /**
@@ -551,18 +523,11 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     	public void run() {
     		
     		// Update time every second, if enabled
-	    	mTimeElapsed += 1;
 	    	
-	        if (mTimerEnabled) {
-	    	    mHandler.postDelayed(this, 1000);
-	        }
+        	mTimer.postDelayed(this, UPDATE_INTERVAL_MILLISEC);
 	    	
-	    	displayTime(mTimeElapsed);
-	    	
-	    	if (mTimeElapsed >= SESSION_TIMELIMIT) {
-	    		stopTimer();
-	    	   	disconnectSensor();
-	    	}
+	    	displayTime(mMonitorSession.getElapsedTime());
+
     	}
     };
     
@@ -571,20 +536,13 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
      */
     private void updateSignal()
     {
-    	mPacketsReceived += mConnectionManager.getPacketsReceived();
-    	mPacketsDropped += mConnectionManager.getPacketsDropped();
-    	long totalPackets = mPacketsReceived + mPacketsDropped;
+    	mMonitorSession.addPacketsReceived(mConnectionManager.getPacketsReceived());
+    	mMonitorSession.addPacketsDropped(mConnectionManager.getPacketsDropped());
     	
-    	Log.d(TAG, "PacketsReceived: " + mPacketsReceived);
-    	Log.d(TAG, "PacketsDropped: " + mPacketsDropped);
+    	Log.d(TAG, "PacketsReceived: " + mMonitorSession.getPacketsReceived());
+    	Log.d(TAG, "PacketsDropped: " + mMonitorSession.getPacketsDropped());
     	
-    	if (totalPackets > 0) {
-    		mThroughput = (int)((100 * mPacketsReceived) / (totalPackets));
-    	} else {
-    		mThroughput = 0;
-    	}
-    	
-    	mRSSI = mConnectionManager.getRSSI();
+    	mMonitorSession.addRSSI(mConnectionManager.getRSSI());
     }
     
     /**
@@ -594,7 +552,7 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     {
 
     	if (mConnectionManager == null) {
-    		clearSession();
+    		mMonitorSession.clear();
     	} else {
     		if (mHRMState == eHRMState.CS_OPENED) {
     	        updateHR();
@@ -650,121 +608,9 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
 	    	}
     	}
     	
-    	if (mHRMState == eHRMState.CS_OPENED) {
-    		if (!mTimerEnabled) {
-    			startTimer();
-    		}
-    	} else {
-    		if (mTimerEnabled) {
-    			stopTimer();
-    		}
-    	}
-    	
     	displayStatus();
     }
-    
-    /**
-     * Called when a view is clicked.
-     */
-    private OnClickListener mClickListener = new OnClickListener()
-    {
-		
-		@Override
-		public void onClick(View v)
-		{
-			if (mConnectionManager == null) {
-	    		return;
-	    	}
-	    	
-	    	switch (v.getId()) {
-	    	    case R.id.button_connection:
-	    	    	// Toggle the ANT+ connection
-	    	    	toggleConnection();
-	    		    break;
-	    	    case R.id.button_heart:
-	    	    	// Show heart rate graph for current session.
-	    	    	// Not implemented yet
-	    		    break;
-	    	    case R.id.button_signal:
-	    	    	// Show signal quality graph for current session.
-	    	    	// Not implemented yet
-	    		    break;
-	    	    case R.id.button_time:
-	    	    	// Show time option activity (e.g. restart, set time limit, etc.)
-	    	    	// Not implemented yet
-	    		    break;
-	    	}
-		}
-		
-	};
-	/*
-    public void onClick(View v)
-    {
-    	if (mConnectionManager == null) {
-    		return;
-    	}
-    	
-    	switch (v.getId()) {
-    	    case R.id.button_connection:
-    	    	// Toggle the ANT+ connection
-    	    	toggleConnection();
-    		    break;
-    	    case R.id.button_heart:
-    	    	// Show heart rate graph for current session.
-    	    	// Not implemented yet
-    		    break;
-    	    case R.id.button_signal:
-    	    	// Show signal quality graph for current session.
-    	    	// Not implemented yet
-    		    break;
-    	    case R.id.button_time:
-    	    	// Show time option activity (e.g. restart, set time limit, etc.)
-    	    	// Not implemented yet
-    		    break;
-    	}
-    }
-    */
-    
-    /**
-     * Called when a view is long-clicked.
-     */
-	private OnLongClickListener mLongClickListener = new OnLongClickListener()
-	{
-		@Override
-		public boolean onLongClick(View v)
-		{
-			if (mConnectionManager == null) {
-	    		return false;
-	    	}
-	    	
-	    	switch (v.getId()) {
-	    	case R.id.button_connection:
-	    		// Reset the ANT+ pairing
-	    		confirmPairingReset();
-	    		break;
-	    	}
-	    	
-	    	return true;
-		}
-	};
-	/*
-	public boolean onLongClick(View v)
-	{
-		if (mConnectionManager == null) {
-    		return false;
-    	}
-    	
-    	switch (v.getId()) {
-    	case R.id.button_connection:
-    		// Reset the ANT+ pairing
-    		confirmPairingReset();
-    		break;
-    	}
-    	
-    	return true;
-	}
-	*/
-    
+        
     // ConnectionManager callback implementations
 
     @Override
@@ -796,6 +642,64 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     	// Don't need to worry about channel; only using HRM
     	updateData();
     }
+    
+    /**
+     * Called when a view is clicked.
+     */
+    private OnClickListener mClickListener = new OnClickListener()
+    {
+		
+		@Override
+		public void onClick(View v)
+		{
+			if (mConnectionManager == null) {
+	    		return;
+	    	}
+	    	
+	    	switch (v.getId()) {
+	    	    case R.id.button_connection:
+	    	    	// Toggle the ANT+ connection
+	    	    	toggleConnection();
+	    		    break;
+	    	    case R.id.button_heart:
+	    	    	// Show heart rate graph for current session.
+	    	    	// Not implemented yet
+	    		    break;
+	    	    case R.id.button_signal:
+	    	    	// Show signal quality graph for current session.
+	    	    	// Not implemented yet
+	    		    break;
+	    	    case R.id.button_time:
+	    	    	// Show time option activity (e.g. restart, set time limit, etc.)
+	    	    	toggleSession();
+	    		    break;
+	    	}
+		}
+		
+	};
+	
+    /**
+     * Called when a view is long-clicked.
+     */
+	private OnLongClickListener mLongClickListener = new OnLongClickListener()
+	{
+		@Override
+		public boolean onLongClick(View v)
+		{
+			if (mConnectionManager == null) {
+	    		return false;
+	    	}
+	    	
+	    	switch (v.getId()) {
+	    	case R.id.button_connection:
+	    		// Reset the ANT+ pairing
+	    		confirmPairingReset();
+	    		break;
+	    	}
+	    	
+	    	return true;
+		}
+	};
     
 }
 

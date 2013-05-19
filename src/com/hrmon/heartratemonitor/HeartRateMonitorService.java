@@ -18,13 +18,20 @@ public class HeartRateMonitorService extends Service {
         {
             return mManager;
         }
+        
+        public MonitorSession getSession()
+        {
+            return mSession;
+        }
     }
     
     private final LocalBinder mBinder = new LocalBinder();
+
+    public static final int NOTIFICATION_ID = 1;
     
     private ConnectionManager mManager;
     
-    public static final int NOTIFICATION_ID = 1;
+    private MonitorSession mSession;
 
     @Override
     public IBinder onBind(Intent intent)
@@ -55,6 +62,8 @@ public class HeartRateMonitorService extends Service {
         super.onCreate();
         mManager = new ConnectionManager();
         mManager.start(this);
+        
+        mSession = new MonitorSession();
     }
 
     @Override
@@ -73,6 +82,9 @@ public class HeartRateMonitorService extends Service {
     @Override
     public void onDestroy()
     {
+    	mSession.stop();
+    	mSession = null;
+    	
         mManager.setCallbacks(null);
         mManager.shutDown();
         mManager = null;
