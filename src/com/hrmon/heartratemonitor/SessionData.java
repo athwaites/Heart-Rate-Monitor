@@ -2,7 +2,7 @@ package com.hrmon.heartratemonitor;
 
 import android.os.SystemClock;
 
-public class MonitorSession {
+public class SessionData {
 	
 	/** Time limit (24h) */
 	public static final long SESSION_TIMELIMIT_HOURS = 12;

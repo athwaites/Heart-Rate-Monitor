@@ -70,7 +70,7 @@ public class ConnectionManager {
     /** Pair to any device. */
     static final short WILDCARD = 0;
     
-    /** The ANT channel for the HRM. */
+    /** ANT+ channel for the HRM. */
     public static final byte HRM_CHANNEL = (byte) 0;
     
     /** ANT+ device type for an HRM */
@@ -78,6 +78,15 @@ public class ConnectionManager {
     
     /** ANT+ channel period for an HRM */
     private static final short HRM_PERIOD = 8070;
+    
+    /** ANT+ lib config flag for extended data with the Channel ID. */
+    public static final byte LC_CHANID = (byte) 0x80;
+    
+    /** ANT+ lib config flag for extended data with the RSSI. */
+    public static final byte LC_RSSI = (byte) 0x40;
+    
+    /** ANT+ lib config flag for extended data with the Timestamp. */
+    public static final byte LC_TIMESTAMP = (byte) 0x20;
     
     //TODO: This string will eventually be provided by the system or by AntLib
     /** String used to represent ant in the radios list. */
@@ -1183,19 +1192,36 @@ public class ConnectionManager {
             }
          }
          
-         // TODO: Extract RSSI from packet here
-         // RSSI is in extended packet region, and must be requested by setting the extended flag byte (0x80 | 0x40)
-         // Normal method of doing this is to call ANTLibConfig(), but the ANT+ Android API does not currently provide this
-         // Could use low-level command packets to configure in meantime?
+         // Extract RSSI from packet
+         mRSSI = (byte)(ANTRxMessage[13] & 0xFF);
          
          // Heart rate available in all pages and regardless of toggle bit            
          mBPM = ANTRxMessage[10] & 0xFF;
+         
+         
          if(mCallbackSink != null)
              mCallbackSink.notifyChannelDataChanged(HRM_CHANNEL);
              
           Log.d(TAG, "antDecodeHRM end");
        }
     };
+    
+    /**
+     * ANT Lib Config to enable extended data
+     *
+     * @param libConfig the lib config parameter; OR the desired LC_* options together
+     */
+    private void antLibConfig(byte libConfig) throws AntInterfaceException
+    {
+    	byte[] enableExt = new byte[4];
+    	
+    	enableExt[0] = (byte) 2;
+    	enableExt[1] = (byte) 0x6e;			// Lib Config ID
+    	enableExt[2] = (byte) 0;			// Filler
+    	enableExt[3] = (byte) libConfig;	// Lib Config value
+    	
+    	mAntReceiver.ANTTxMessage(enableExt);
+    }
     
     /**
      * ANT Channel Configuration.
@@ -1217,6 +1243,9 @@ public class ConnectionManager {
            channelConfig.isInitializing = true;
            channelConfig.isDeinitializing = false;
 
+           // Configure ANT+ to send extended data with RSSI
+           antLibConfig(LC_RSSI);
+           
            mAntReceiver.ANTAssignChannel(channel, AntDefine.PARAMETER_RX_NOT_TX, networkNumber);  // Assign as slave channel on selected network (0 = public, 1 = ANT+, 2 = ANTFS)
            // The rest of the channel configuration will occur after the response is received (in responseEventHandler)
        }

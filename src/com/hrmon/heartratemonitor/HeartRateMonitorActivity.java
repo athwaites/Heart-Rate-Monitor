@@ -9,7 +9,6 @@ import android.content.ComponentName;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -20,7 +19,7 @@ import android.view.View.OnLongClickListener;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-public class HeartRateMonitorActivity extends Activity implements ConnectionManager.Callbacks {
+public class HeartRateMonitorActivity extends Activity implements SessionManager.Callbacks {
 	
 	/** The Log Tag. */
 	public static final String TAG = "HRMon - App";
@@ -28,66 +27,40 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
 	/** Update interval */
 	public static final long UPDATE_INTERVAL_MILLISEC = 500;
 	
-	/** Boolean flag to indicate if ANT+ service is bound to this activity. */
+	/** Boolean flag to indicate if Heart Rate Monitor Service is bound to this activity. */
 	private boolean mBound;
 	
-	/** Manager for the ANT+ connection. */
-	private ConnectionManager mConnectionManager;
+	/** Data handler for the monitor session. */
+	private SessionData mSessionData;
 	
-	/** Manager for the ANT+ connection. */
-	private MonitorSession mMonitorSession;
-	
-	/** Boolean flag to indicate if ANT+ pairing was recently reset. */
-	private boolean mPairingReset = false;
-	
-	/** Pair to any device. */
-	static final short WILDCARD = 0;
-	   
-	/** The default proximity search bin. */
-	private static final byte DEFAULT_BIN = 7;
-	
-	/** The default event buffering buffer threshold. */
-	private static final short DEFAULT_BUFFER_THRESHOLD = 0;
-	   
-	/** Shared preferences data filename. */
-	public static final String PREFS_NAME = "HRMonPrefs";
-	
-	/** Heart Rate Monitor state enumeration */
-	private enum eHRMState {
-		CS_RESET,
-		CS_CLOSED,
-		CS_OFFLINE,
-		CS_OPENING,
-		CS_SEARCHING,
-		CS_OPENED,
-		CS_ERROR
-	}
-	
-	/** Heart Rate Monitor FSM */
-	private eHRMState mHRMState = eHRMState.CS_CLOSED;
-	
+	/** Manager for the session. */
+	private SessionManager mSessionManager;
+
 	/** Handler for timer */
 	private Handler mTimer = new Handler();
 	
 	/** Bind the service. */
-	private final ServiceConnection mConnection = new ServiceConnection()
+	private final ServiceConnection mService = new ServiceConnection()
 	{
 	    @Override
 	    public void onServiceDisconnected(ComponentName name)
 	    {
-	    	mConnectionManager.setCallbacks(null);
-	    	mConnectionManager = null;
-	    	mMonitorSession = null;
+	    	mSessionData = null;
+	    	mSessionManager = null;
+	    	
+	    	mTimer.removeCallbacks(updateTime);
 	    }
 	        
 	    @Override
 	    public void onServiceConnected(ComponentName name, IBinder service)
 	    {
-	    	mConnectionManager = ((HeartRateMonitorService.LocalBinder)service).getManager();
-	    	mConnectionManager.setCallbacks(HeartRateMonitorActivity.this);
-	    	mMonitorSession = ((HeartRateMonitorService.LocalBinder)service).getSession();
-	        loadConfiguration();
-	        notifyAntStateChanged();
+	    	mSessionData = ((HeartRateMonitorService.LocalBinder)service).getSession();
+	    	mSessionManager = ((HeartRateMonitorService.LocalBinder)service).getManager();
+	    	
+	    	mSessionManager.setCallbacks(HeartRateMonitorActivity.this);
+	    	mSessionManager.loadConfiguration(HeartRateMonitorActivity.this);
+	        
+	        mTimer.postDelayed(updateTime, UPDATE_INTERVAL_MILLISEC);
 	    }
 	};
 	
@@ -107,7 +80,7 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     @Override
     protected void onStart()
     {
-        mBound = bindService(new Intent(this, HeartRateMonitorService.class), mConnection, BIND_AUTO_CREATE);
+        mBound = bindService(new Intent(this, HeartRateMonitorService.class), mService, BIND_AUTO_CREATE);
         super.onStart();
     }
     
@@ -115,14 +88,32 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     @Override
     protected void onStop()
     {
-        if(mConnectionManager != null) {
-            saveState();
-            mConnectionManager.setCallbacks(null);
+        if(mSessionManager != null) {
+        	mSessionManager.saveConfiguration(HeartRateMonitorActivity.this);
+            mSessionManager.setCallbacks(null);
         }
+        
         if(mBound) {
-            unbindService(mConnection);
+            unbindService(mService);
         }
+        
         super.onStop();
+    }
+    
+    // SessionManager callback implementations
+
+    /** Called when the service reports a state change. */
+    @Override
+    public void notifyStateChanged()
+    {
+    	displayStatus();
+    }
+    
+    /** Called when the service reports new incoming data. */
+    @Override
+    public void notifyNewData()
+    {
+    	displayData();
     }
     
     /**
@@ -143,6 +134,43 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     	findViewById(R.id.button_connection).setOnClickListener(mClickListener);
     	findViewById(R.id.button_connection).setOnLongClickListener(mLongClickListener);
     }
+    
+    /**
+     * Confirm the user wants to reset the ANT+ connection pairing. 
+     */
+    private void confirmPairingReset()
+    {
+    	AlertDialog.Builder builder = new AlertDialog.Builder(this);
+    	builder.setMessage(getString(R.string.Confirm_Pairing_Reset))
+    	       .setCancelable(false)
+    	       .setPositiveButton(getString(R.string.Positive_Response), new DialogInterface.OnClickListener() {
+    	           public void onClick(DialogInterface dialog, int id) {
+    	        	   mSessionManager.resetPairing();
+    	           }
+    	       })
+    	       .setNegativeButton(getString(R.string.Negative_Response), new DialogInterface.OnClickListener() {
+    	           public void onClick(DialogInterface dialog, int id) {
+    	                dialog.cancel();
+    	           }
+    	       });
+    	AlertDialog alert = builder.create();
+    	alert.show();
+    }
+    
+    /**
+     * Update time elapsed.
+     */
+    private Runnable updateTime = new Runnable() {
+    	public void run() {
+    		
+    		// Update time every second, if enabled
+	    	
+        	mTimer.postDelayed(this, UPDATE_INTERVAL_MILLISEC);
+	    	
+	    	displayTime(mSessionData.getElapsedTime());
+
+    	}
+    };
     
     /**
      * Display the Heart Rate
@@ -242,11 +270,11 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     	int curRSSI = 0;
     	int curThroughput = 0;
     	
-    	if (mMonitorSession != null) {
-    		curHR = mMonitorSession.getLastHR();
-        	curElapsedTime = mMonitorSession.getElapsedTime();
-        	curRSSI = mMonitorSession.getLastRSSI();
-        	curThroughput = mMonitorSession.getPacketThroughput();
+    	if (mSessionData != null) {
+    		curHR = mSessionData.getLastHR();
+        	curElapsedTime = mSessionData.getElapsedTime();
+        	curRSSI = mSessionData.getLastRSSI();
+        	curThroughput = mSessionData.getPacketThroughput();
     	}
     	
     	displayHR(curHR);
@@ -260,387 +288,81 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
     private void displayStatus()
     {
     	String str = null;
-    	String antState = null;
+    	String connState = null;
     	int imgRes = 0;
     	
-    	if (mConnectionManager != null) {
-    		if (mConnectionManager.checkAntState()) {
-    			antState = mConnectionManager.getAntStateText();
-    		}
+    	if (mSessionManager != null) {
+   			connState = mSessionManager.getConnStateText();
+    		
+	    	switch (mSessionManager.getState()) {
+	    		case CLOSED:
+	    			// Disconnected
+	    			imgRes = R.drawable.ic_disconnected;
+	    			str = getString(R.string.Status_Disconnected);
+	    			str = str + "\n\n";
+	    			if (connState == null) {
+	    				str = str + getString(R.string.Status_Closed);
+	    			} else {
+	    				str = str + connState;
+	    			}
+	    			break;
+	    		case OFFLINE:
+	    			// Disconnected (No sensor)
+	    			imgRes = R.drawable.ic_disconnected;
+	    			str = getString(R.string.Status_Disconnected);
+	    			str = str + "\n\n";
+	    			if (connState == null) {
+	    			    str = str + getString(R.string.Status_Offline);
+	    			} else {
+	    				str = str + connState;
+	    			}
+	    			break;
+	    		case PENDING_OPEN:
+	    			// Connecting (Enabling ANT+)
+	    			imgRes = R.drawable.ic_connecting;
+	    			str = getString(R.string.Status_Connecting);
+	    			str = str + "\n\n";
+	    			str = str + getString(R.string.Status_Opening);
+	    			break;
+	    		case SEARCHING:
+	    			// Connecting (Looking for sensor)
+	    			imgRes = R.drawable.ic_connecting;
+	    			str = getString(R.string.Status_Connecting);
+	    			str = str + "\n\n";
+	    			str = str + getString(R.string.Status_Searching);
+	    			break;
+	    		case TRACKING_STATUS:
+	    			// Connected (New data has arrived)
+	    		case TRACKING_DATA:
+	    			// Connected (Sensor connected)
+	    			imgRes = R.drawable.ic_connected;
+	    			str = getString(R.string.Status_Connected);
+	    			str = str + "\n\n";
+	    			str = str + getString(R.string.Status_Opened);
+	    			break;
+	    		default:
+	    			// Unhandled state (Error)
+	    			imgRes = R.drawable.ic_disconnected;
+	    			str = getString(R.string.Status_Disconnected);
+	    			str = str + "\n\n";
+	    			if (connState == null) {
+	    			    str = str + getString(R.string.Status_Error);
+	    			} else {
+	    				str = str + connState;
+	    			}
+	    			break;
+	    	}
+    	} else {
+    		// Disconnected
+			imgRes = R.drawable.ic_disconnected;
+			str = getString(R.string.Status_Disconnected);
+			str = str + "\n\n";
+			str = str + getString(R.string.Status_Closed);
     	}
-    	
-    	switch (mHRMState) {
-    		case CS_RESET:
-    			imgRes = R.drawable.ic_disconnected;
-    			str = getString(R.string.Status_Disconnected);
-    			str = str + "\n\n";
-    			if (antState == null) {
-    				str = str + getString(R.string.Status_Pairing_Reset);
-    			} else {
-    				str = str + antState;
-    			}
-    			break;
-    		case CS_CLOSED:
-    			imgRes = R.drawable.ic_disconnected;
-    			str = getString(R.string.Status_Disconnected);
-    			str = str + "\n\n";
-    			if (antState == null) {
-    				str = str + getString(R.string.Status_Closed);
-    			} else {
-    				str = str + antState;
-    			}
-    			break;
-    		case CS_OFFLINE:
-    			imgRes = R.drawable.ic_disconnected;
-    			str = getString(R.string.Status_Disconnected);
-    			str = str + "\n\n";
-    			if (antState == null) {
-    			    str = str + getString(R.string.Status_Offline);
-    			} else {
-    				str = str + antState;
-    			}
-    			break;
-    		case CS_OPENING:
-    			imgRes = R.drawable.ic_connecting;
-    			str = getString(R.string.Status_Connecting);
-    			str = str + "\n\n";
-    			str = str + getString(R.string.Status_Opening);
-    			break;
-    		case CS_SEARCHING:
-    			imgRes = R.drawable.ic_connecting;
-    			str = getString(R.string.Status_Connecting);
-    			str = str + "\n\n";
-    			str = str + getString(R.string.Status_Searching);
-    			break;
-    		case CS_OPENED:
-    			imgRes = R.drawable.ic_connected;
-    			str = getString(R.string.Status_Connected);
-    			str = str + "\n\n";
-    			str = str + getString(R.string.Status_Opened);
-    			break;
-    		case CS_ERROR:
-    		default:
-    			imgRes = R.drawable.ic_disconnected;
-    			str = getString(R.string.Status_Disconnected);
-    			str = str + "\n\n";
-    			if (antState == null) {
-    			    str = str + getString(R.string.Status_Error);
-    			} else {
-    				str = str + antState;
-    			}
-    			break;
-    	}
-    	
+	    	
     	// Update the UI elements with the latest status
     	((ImageView)findViewById(R.id.button_connection)).setImageResource(imgRes);
     	((TextView)findViewById(R.id.status)).setText(str);
-    }
-    
-    /**
-     * Store application persistent data.
-     */
-    private void saveState()
-    {
-       // Save current Channel Id in preferences
-       // We need an Editor object to make changes
-       SharedPreferences settings = getSharedPreferences(PREFS_NAME, 0);
-       SharedPreferences.Editor editor = settings.edit();
-       editor.putInt("DeviceNumberHRM", mConnectionManager.getDeviceNumberHRM());
-       editor.putInt("ProximityThreshold", mConnectionManager.getProximityThreshold());
-       editor.putInt("BufferThreshold", mConnectionManager.getBufferThreshold());
-       editor.commit();
-    }
-    
-    /**
-     * Retrieve application persistent data.
-     */
-    private void loadConfiguration()
-    {
-       // Restore preferences
-       SharedPreferences settings = getSharedPreferences(PREFS_NAME, 0);
-       mConnectionManager.setDeviceNumberHRM((short) settings.getInt("DeviceNumberHRM", WILDCARD));
-       mConnectionManager.setProximityThreshold((byte) settings.getInt("ProximityThreshold", DEFAULT_BIN));
-       mConnectionManager.setBufferThreshold((short) settings.getInt("BufferThreshold", DEFAULT_BUFFER_THRESHOLD));       
-    }
-    
-    /**
-     * Delete application persistent data.
-     */
-    private void deleteConfiguration()
-    {
-    	// Clear application persistent data
-    	SharedPreferences.Editor editor = getSharedPreferences(PREFS_NAME, 0).edit();
-    	editor.clear();
-    	editor.commit();
-    }
-    
-    /**
-     * Reset application persistent data to default.
-     */
-    private void resetConfiguration()
-    {
-    	deleteConfiguration();
-    	loadConfiguration();
-    }
-    
-    /**
-     * Reset the ANT+ connection pairing.
-     */
-    private void resetPairing()
-    {
-    	mPairingReset = true;
-    	
-    	disconnectSensor();
-    	
-    	mConnectionManager.setDeviceNumberHRM(WILDCARD);
-        mConnectionManager.setProximityThreshold(DEFAULT_BIN);
-        mConnectionManager.setBufferThreshold(DEFAULT_BUFFER_THRESHOLD);
-        
-        updateState();
-    }
-    
-    /**
-     * Confirm the user wants to reset the ANT+ connection pairing. 
-     */
-    private void confirmPairingReset()
-    {
-    	AlertDialog.Builder builder = new AlertDialog.Builder(this);
-    	builder.setMessage(getString(R.string.Confirm_Pairing_Reset))
-    	       .setCancelable(false)
-    	       .setPositiveButton(getString(R.string.Positive_Response), new DialogInterface.OnClickListener() {
-    	           public void onClick(DialogInterface dialog, int id) {
-    	                HeartRateMonitorActivity.this.resetPairing();
-    	           }
-    	       })
-    	       .setNegativeButton(getString(R.string.Negative_Response), new DialogInterface.OnClickListener() {
-    	           public void onClick(DialogInterface dialog, int id) {
-    	                dialog.cancel();
-    	           }
-    	       });
-    	AlertDialog alert = builder.create();
-    	alert.show();
-    }
-    
-    /**
-     * Toggle the ANT+ connection [connect/disconnect]
-     */
-    private void toggleConnection()
-    {
-    	if ((mHRMState == eHRMState.CS_CLOSED) || (mHRMState == eHRMState.CS_RESET)) {
-    		// Connect
-    		connectSensor();
-    	} else {
-    		// Disconnect
-    		disconnectSensor();
-    	}
-    }
-    
-    /**
-     * Establish ANT+ connection with HR Sensor.
-     */
-    private void connectSensor()
-    {
-		// Enable ANT+
-    	if (!mConnectionManager.isEnabled()) {
-    	    mConnectionManager.doEnable();
-    	}
-    	
-    	// Open HRM channel
-    	// (reset on all attempts; otherwise would call 
-    	// "openChannel(HRM_CHANNEL, false)" and exclude "requestReset()" 
-        if (!mConnectionManager.isChannelOpen(ConnectionManager.HRM_CHANNEL)) {
-            Log.d(TAG, "onClick (HRM): Open channel");
-            // Defer opening the channel until an ANT_RESET has been received
-            mConnectionManager.openChannel(ConnectionManager.HRM_CHANNEL, true);
-            mConnectionManager.requestReset();
-        }
-    }
-    
-    /**
-     * Terminate ANT+ connection with HR Sensor.
-     */
-    private void disconnectSensor()
-    {
-    	
-		// Close HRM channel
-    	if (mConnectionManager.isChannelOpen(ConnectionManager.HRM_CHANNEL)) {
-            // Close channel
-            Log.d(TAG, "onClick (HRM): Close channel");
-            mConnectionManager.closeChannel(ConnectionManager.HRM_CHANNEL);
-        }
-    	
-    	// Disable ANT+
-    	if (mConnectionManager.isEnabled()) {
-    	    mConnectionManager.doDisable();
-    	}
-    }
-    
-    /**
-     * Toggles the session.
-     */
-    private void toggleSession()
-    {
-    	if (mMonitorSession.isStarted()) {
-    		stopSession();
-    	} else {
-    		if (mHRMState == eHRMState.CS_OPENED) {
-    			startSession();
-    		}
-    	}
-    }
-    
-    /**
-     * Starts the session.
-     */
-    private void startSession()
-    {
-    	mTimer.postDelayed(updateTime, UPDATE_INTERVAL_MILLISEC);
-    	mMonitorSession.clear();
-    	mMonitorSession.start();
-    }
-    
-    /**
-     * Stops the session.
-     */
-    private void stopSession()
-    {
-    	mTimer.removeCallbacks(updateTime);
-    	mMonitorSession.stop();
-    }
-    
-    /**
-     * Update HR data.
-     */
-    private void updateHR()
-    {
-    	mMonitorSession.addHR(mConnectionManager.getBPM());
-    }
-    
-    /**
-     * Update time elapsed.
-     */
-    private Runnable updateTime = new Runnable() {
-    	public void run() {
-    		
-    		// Update time every second, if enabled
-	    	
-        	mTimer.postDelayed(this, UPDATE_INTERVAL_MILLISEC);
-	    	
-	    	displayTime(mMonitorSession.getElapsedTime());
-
-    	}
-    };
-    
-    /**
-     * Update signal data.
-     */
-    private void updateSignal()
-    {
-    	mMonitorSession.addPacketsReceived(mConnectionManager.getPacketsReceived());
-    	mMonitorSession.addPacketsDropped(mConnectionManager.getPacketsDropped());
-    	
-    	Log.d(TAG, "PacketsReceived: " + mMonitorSession.getPacketsReceived());
-    	Log.d(TAG, "PacketsDropped: " + mMonitorSession.getPacketsDropped());
-    	
-    	mMonitorSession.addRSSI(mConnectionManager.getRSSI());
-    }
-    
-    /**
-     * Update data for displaying on the UI.
-     */
-    private void updateData()
-    {
-
-    	if (mConnectionManager == null) {
-    		mMonitorSession.clear();
-    	} else {
-    		if (mHRMState == eHRMState.CS_OPENED) {
-    	        updateHR();
-    	        updateSignal();
-    		}
-    	}
-    	
-    	displayData();
-    }
-    
-    /**
-     * Update FSM state based on connection manager response.
-     */
-    private void updateState()
-    {
-    	if (mConnectionManager == null) {
-    		mHRMState = eHRMState.CS_CLOSED;
-    	} else {
-	    	switch (mConnectionManager.getHrmState()) {
-	        case CLOSED:
-	        	// Disconnected
-	        	if (mPairingReset) {
-	        		mHRMState = eHRMState.CS_RESET;
-	        	} else {
-	        		mHRMState = eHRMState.CS_CLOSED;
-	        	}
-	            break;
-	        case OFFLINE:
-	        	// Disconnected (No sensor)
-	        	mHRMState = eHRMState.CS_OFFLINE;
-	            break;
-	        case SEARCHING:
-	        	// Connecting (Looking for sensor)
-	        	mHRMState = eHRMState.CS_SEARCHING;
-	            break;
-	        case PENDING_OPEN:
-	        	// Connecting (Enabling ANT+)
-	        	mPairingReset = false;
-	        	mHRMState = eHRMState.CS_OPENING;
-	            break;
-	        case TRACKING_STATUS:
-	            // Connected (New data has arrived)
-	        	mHRMState = eHRMState.CS_OPENED;
-	        case TRACKING_DATA:
-	        	// Connected (Sensor connected)
-	        	mHRMState = eHRMState.CS_OPENED;
-	            break;
-	        default:
-	        	// Unhandled state (Error)
-	        	// Should we force the disconnect here anyway? (call "disconnectSession()")
-	        	mHRMState = eHRMState.CS_ERROR;
-	            break;
-	    	}
-    	}
-    	
-    	displayStatus();
-    }
-        
-    // ConnectionManager callback implementations
-
-    @Override
-    public void errorCallback()
-    {
-    	// Update state with error
-    	updateState();
-    }
-
-    @Override
-    public void notifyAntStateChanged()
-    {
-    	// Update state based on new ANT+ status
-    	updateState();
-    }
-    
-    @Override
-    public void notifyChannelStateChanged(byte channel)
-    {
-    	// Update state based on new channel status
-    	// Don't need to worry about channel; only using HRM
-    	updateState();
-    }
-    
-    @Override
-    public void notifyChannelDataChanged(byte channel)
-    {
-    	// Update data with new stream from channel
-    	// Don't need to worry about channel; only using HRM
-    	updateData();
     }
     
     /**
@@ -652,14 +374,14 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
 		@Override
 		public void onClick(View v)
 		{
-			if (mConnectionManager == null) {
+			if (mSessionManager == null) {
 	    		return;
 	    	}
 	    	
 	    	switch (v.getId()) {
 	    	    case R.id.button_connection:
 	    	    	// Toggle the ANT+ connection
-	    	    	toggleConnection();
+	    	    	mSessionManager.toggleConnection();
 	    		    break;
 	    	    case R.id.button_heart:
 	    	    	// Show heart rate graph for current session.
@@ -671,7 +393,7 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
 	    		    break;
 	    	    case R.id.button_time:
 	    	    	// Show time option activity (e.g. restart, set time limit, etc.)
-	    	    	toggleSession();
+	    	    	mSessionManager.toggleSession();
 	    		    break;
 	    	}
 		}
@@ -686,7 +408,7 @@ public class HeartRateMonitorActivity extends Activity implements ConnectionMana
 		@Override
 		public boolean onLongClick(View v)
 		{
-			if (mConnectionManager == null) {
+			if (mSessionManager == null) {
 	    		return false;
 	    	}
 	    	

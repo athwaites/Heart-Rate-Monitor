@@ -12,27 +12,38 @@ public class HeartRateMonitorService extends Service {
 	
     private static final String TAG = "HRMon - Service";
     
+    public static final int NOTIFICATION_ID = 1;
+    
+    /** Binder */
     public class LocalBinder extends Binder
     {
-        public ConnectionManager getManager()
+        public ConnectionManager getConnection()
         {
-            return mManager;
+            return mConnection;
         }
         
-        public MonitorSession getSession()
+        public SessionData getSession()
         {
             return mSession;
+        }
+        
+        public SessionManager getManager()
+        {
+            return mManager;
         }
     }
     
     private final LocalBinder mBinder = new LocalBinder();
-
-    public static final int NOTIFICATION_ID = 1;
     
-    private ConnectionManager mManager;
+    /** Manager for the ANT+ connection. */
+    private ConnectionManager mConnection;
     
-    private MonitorSession mSession;
-
+    /** Data handler for the monitor session. */
+    private SessionData mSession;
+    
+    /** Manager for the session. */
+    private SessionManager mManager;
+	
     @Override
     public IBinder onBind(Intent intent)
     {
@@ -60,10 +71,13 @@ public class HeartRateMonitorService extends Service {
     {
         Log.i(TAG, "Service created.");
         super.onCreate();
-        mManager = new ConnectionManager();
-        mManager.start(this);
         
-        mSession = new MonitorSession();
+        mConnection = new ConnectionManager();
+        mConnection.start(this);
+        
+        mSession = new SessionData();
+        
+        mManager = new SessionManager(mConnection, mSession);
     }
 
     @Override
@@ -82,12 +96,16 @@ public class HeartRateMonitorService extends Service {
     @Override
     public void onDestroy()
     {
+    	mManager.setCallbacks(null);
+    	mManager = null;
+    	
     	mSession.stop();
     	mSession = null;
     	
-        mManager.setCallbacks(null);
-        mManager.shutDown();
-        mManager = null;
+    	mConnection.setCallbacks(null);
+    	mConnection.shutDown();
+    	mConnection = null;
+    	
         super.onDestroy();
         Log.i(TAG, "Service destroyed.");
     }
