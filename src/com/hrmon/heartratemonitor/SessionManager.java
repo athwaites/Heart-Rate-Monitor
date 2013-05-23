@@ -27,7 +27,6 @@ public class SessionManager implements ConnectionManager.Callbacks {
 	   
 	/** Shared preferences data filename. */
 	public static final String PREFS_NAME = "HRMonPrefs";
-
 	
     /**
      * Defines the interface needed to work with all call backs this class makes
@@ -212,9 +211,17 @@ public class SessionManager implements ConnectionManager.Callbacks {
     /**
      * Update HR data.
      */
-    private void updateHR()
+    private void updateRR()
     {
-    	mSession.addHR(mConnection.getBPM());
+    	mSession.addRR(mConnection.getRR());
+    }
+    
+    /**
+     * Update HR data.
+     */
+    private void updateBPM()
+    {
+    	mSession.addBPM(mConnection.getBPM());
     }
     
     /**
@@ -227,27 +234,7 @@ public class SessionManager implements ConnectionManager.Callbacks {
     	
     	mSession.addRSSI(mConnection.getRSSI());
     }
-    
-    /**
-     * Update data for displaying on the UI.
-     */
-    private void updateData()
-    {
-    	if (mConnection == null) {
-    		mSession.clear();
-    	} else {
-    		switch (mConnection.getHrmState()) {
-    		case TRACKING_STATUS:
-                // Connected (New data has arrived)
-            case TRACKING_DATA:
-            	// Connected (Sensor connected)
-    		    updateHR();
-    	        updateSignal();
-    	        break;
-    		}
-    	}
-    }
-    
+
  // ConnectionManager callback implementations
 
  	@Override
@@ -267,7 +254,41 @@ public class SessionManager implements ConnectionManager.Callbacks {
  			mCallbackSink.notifyStateChanged();
  		}
  	}
-     
+ 	
+ 	@Override
+ 	public void notifyNewRRData()
+ 	{
+ 		// Update data with new stream from channel
+ 	 	updateRR();
+ 	 	
+ 		if(mCallbackSink != null) {
+ 			mCallbackSink.notifyNewData();
+ 		}
+ 	}
+ 	
+ 	@Override
+ 	public void notifyNewBPMData()
+ 	{
+ 		// Update data with new stream from channel
+ 	 	updateBPM();
+ 	 	
+ 		if(mCallbackSink != null) {
+ 			mCallbackSink.notifyNewData();
+ 		}
+ 	}
+ 	
+ 	@Override
+ 	public void notifyNewRSSIData(byte channel)
+ 	{
+ 		// Update data with new stream from channel
+ 	 	// Don't need to worry about channel; only using HRM
+ 	 	updateSignal();
+ 	 	
+ 		if(mCallbackSink != null) {
+ 			mCallbackSink.notifyNewData();
+ 		}
+ 	}
+ 	
  	@Override
  	public void notifyChannelStateChanged(byte channel)
  	{
@@ -283,7 +304,9 @@ public class SessionManager implements ConnectionManager.Callbacks {
  	{
  		// Update data with new stream from channel
  		// Don't need to worry about channel; only using HRM
- 		updateData();
+ 		updateRR();
+ 		updateBPM();
+ 		updateSignal();
      	
  		if(mCallbackSink != null) {
  			mCallbackSink.notifyNewData();

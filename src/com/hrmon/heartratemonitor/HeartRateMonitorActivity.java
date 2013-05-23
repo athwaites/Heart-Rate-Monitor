@@ -18,6 +18,7 @@ import android.view.View.OnClickListener;
 import android.view.View.OnLongClickListener;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.ViewFlipper;
 
 public class HeartRateMonitorActivity extends Activity implements SessionManager.Callbacks {
 	
@@ -25,7 +26,7 @@ public class HeartRateMonitorActivity extends Activity implements SessionManager
 	public static final String TAG = "HRMon - App";
 
 	/** Update interval */
-	public static final long UPDATE_INTERVAL_MILLISEC = 500;
+	public static final long UPDATE_INTERVAL_MILLISEC = 100;
 	
 	/** Boolean flag to indicate if Heart Rate Monitor Service is bound to this activity. */
 	private boolean mBound;
@@ -39,6 +40,18 @@ public class HeartRateMonitorActivity extends Activity implements SessionManager
 	/** Handler for timer */
 	private Handler mTimer = new Handler();
 	
+	/** ViewFlipper */
+	private ViewFlipper mViewFlipper;
+	
+	/** Display Screen State */
+	private enum eDisplayScreen {
+		DISP_MAIN,
+		DISP_HRDATA,
+		DISP_SIGDATA
+	}
+	
+	private eDisplayScreen mDisplayScreen = eDisplayScreen.DISP_MAIN;
+	
 	/** Bind the service. */
 	private final ServiceConnection mService = new ServiceConnection()
 	{
@@ -49,6 +62,8 @@ public class HeartRateMonitorActivity extends Activity implements SessionManager
 	    	mSessionManager = null;
 	    	
 	    	mTimer.removeCallbacks(updateTime);
+	    	
+	    	Log.i(TAG, "Service disconnected.");
 	    }
 	        
 	    @Override
@@ -58,9 +73,10 @@ public class HeartRateMonitorActivity extends Activity implements SessionManager
 	    	mSessionManager = ((HeartRateMonitorService.LocalBinder)service).getManager();
 	    	
 	    	mSessionManager.setCallbacks(HeartRateMonitorActivity.this);
-	    	mSessionManager.loadConfiguration(HeartRateMonitorActivity.this);
 	        
 	        mTimer.postDelayed(updateTime, UPDATE_INTERVAL_MILLISEC);
+	        
+	        Log.i(TAG, "Service disconnected.");
 	    }
 	};
 	
@@ -69,11 +85,15 @@ public class HeartRateMonitorActivity extends Activity implements SessionManager
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        setContentView(R.layout.main);
+        setContentView(R.layout.index);
         setListenerMethods();
+        mViewFlipper = (ViewFlipper) findViewById(R.id.index_view_flipper);
+        mDisplayScreen = eDisplayScreen.DISP_MAIN;
 
         displayStatus();
         displayData();
+        
+        Log.i(TAG, "Activity created.");
     }
     
     /** Called when the activity is started. */
@@ -167,30 +187,38 @@ public class HeartRateMonitorActivity extends Activity implements SessionManager
 	    	
         	mTimer.postDelayed(this, UPDATE_INTERVAL_MILLISEC);
 	    	
-	    	displayTime(mSessionData.getElapsedTime());
+        	if (mDisplayScreen == eDisplayScreen.DISP_MAIN) {
+        		displayTime(mSessionData.getElapsedTime());
+        	}
 
     	}
     };
     
     /**
      * Display the Heart Rate
-     * @param valHR     value representing the heart rate in the default units
+     * @param valRR     	value representing the RR interval in the units specified
+     * @param valBPM     	value representing the heart rate in the default units
      */
-    private void displayHR(int valHR)
+    private void displayHR(int valRR, int valBPM)
     {
-    	displayHR(valHR, getString(R.string.Heart_Rate_Units));
+    	displayHR(valRR, getString(R.string.Data_RR_Units), valBPM, getString(R.string.Data_BPM_Units));
     }
     
     /**
      * Display the Heart Rate
-     * @param valHR     value representing the heart rate in the units specified
-     * @param units     string describing the heart rate units (e.g. "bpm")
+     * @param valRR     	value representing the RR interval in the units specified
+     * @param unitsRR   	string describing the RR interval units (e.g. "ms")
+     * @param valBPM     	value representing the heart rate in the units specified
+     * @param unitsBPM   	string describing the heart rate units (e.g. "bpm")
      */
-    private void displayHR(int valHR, String units)
+    private void displayHR(int valRR, String unitsRR, int valBPM, String unitsBPM)
     {
     	TextView t = ((TextView)findViewById(R.id.text_heart));
     	
-   		t.setText(valHR + " " + units);
+   		t.setText(
+   				valRR + " " + unitsRR + " " +
+   				getString(R.string.Signal_Delimiter) + " " +
+   				valBPM + " " + unitsBPM + " ");
     }
     
     /**
@@ -265,19 +293,21 @@ public class HeartRateMonitorActivity extends Activity implements SessionManager
      */
     private void displayData()
     {
-    	int curHR = 0;
+    	int curRR = 0;
+    	int curBPM = 0;
     	long curElapsedTime = 0;
     	int curRSSI = 0;
     	int curThroughput = 0;
     	
     	if (mSessionData != null) {
-    		curHR = mSessionData.getLastHR();
+    		curRR = mSessionData.getLastRR();
+    		curBPM = mSessionData.getLastBPM();
         	curElapsedTime = mSessionData.getElapsedTime();
         	curRSSI = mSessionData.getLastRSSI();
         	curThroughput = mSessionData.getPacketThroughput();
     	}
     	
-    	displayHR(curHR);
+    	displayHR(curRR, curBPM);
     	displayTime(curElapsedTime);
     	displaySignal(curRSSI, curThroughput);
     }
@@ -365,6 +395,70 @@ public class HeartRateMonitorActivity extends Activity implements SessionManager
     	((TextView)findViewById(R.id.status)).setText(str);
     }
     
+    /*
+     * Display the Android Home
+     */
+    private void displayAndroidHome()
+    {
+    	Intent intent = new Intent(Intent.ACTION_MAIN);
+	    intent.addCategory(Intent.CATEGORY_HOME);
+	    startActivity(intent);
+    }
+    
+    /*
+     * Display the Main Screen
+     */
+    private void displayMainScreen()
+    {
+    	int targetIndex = mViewFlipper.indexOfChild(findViewById(R.id.layout_main));
+    	
+    	if (mViewFlipper.getDisplayedChild() == targetIndex)  {
+    		return;
+    	}
+    	
+    	mDisplayScreen = eDisplayScreen.DISP_MAIN;
+    	
+    	mViewFlipper.setInAnimation(this, R.anim.in_from_left);
+    	mViewFlipper.setOutAnimation(this, R.anim.out_to_right);
+    	mViewFlipper.setDisplayedChild(targetIndex);
+    }
+    
+    /*
+     * Display the HR Data Screen
+     */
+    private void displayHRScreen()
+    {
+    	int targetIndex = mViewFlipper.indexOfChild(findViewById(R.id.layout_hrdata));
+    	
+    	if (mViewFlipper.getDisplayedChild() == targetIndex)  {
+    		return;
+    	}
+    	
+    	mDisplayScreen = eDisplayScreen.DISP_HRDATA;
+    	
+    	mViewFlipper.setInAnimation(this, R.anim.in_from_right);
+    	mViewFlipper.setOutAnimation(this, R.anim.out_to_left);
+    	mViewFlipper.setDisplayedChild(targetIndex);
+    }
+    
+    /*
+     * Display the Signal Data Screen
+     */
+    private void displaySignalScreen()
+    {
+    	int targetIndex = mViewFlipper.indexOfChild(findViewById(R.id.layout_signaldata));
+    	
+    	if (mViewFlipper.getDisplayedChild() == targetIndex) {
+    		return;
+    	}
+    	
+    	mDisplayScreen = eDisplayScreen.DISP_SIGDATA;
+    	
+    	mViewFlipper.setInAnimation(this, R.anim.in_from_right);
+    	mViewFlipper.setOutAnimation(this, R.anim.out_to_left);
+    	mViewFlipper.setDisplayedChild(targetIndex);
+    }
+    
     /**
      * Called when a view is clicked.
      */
@@ -385,11 +479,11 @@ public class HeartRateMonitorActivity extends Activity implements SessionManager
 	    		    break;
 	    	    case R.id.button_heart:
 	    	    	// Show heart rate graph for current session.
-	    	    	// Not implemented yet
+	    	    	displayHRScreen();
 	    		    break;
 	    	    case R.id.button_signal:
 	    	    	// Show signal quality graph for current session.
-	    	    	// Not implemented yet
+	    	    	displaySignalScreen();
 	    		    break;
 	    	    case R.id.button_time:
 	    	    	// Show time option activity (e.g. restart, set time limit, etc.)
@@ -422,6 +516,25 @@ public class HeartRateMonitorActivity extends Activity implements SessionManager
 	    	return true;
 		}
 	};
+	
+	/**
+     * Called when the back button is pressed.
+     */
+	@Override
+	public void onBackPressed()
+	{
+		switch (mDisplayScreen) {
+		case DISP_MAIN:
+			displayAndroidHome();
+			break;
+		case DISP_HRDATA:
+			displayMainScreen();
+			break;
+		case DISP_SIGDATA:
+			displayMainScreen();
+			break;
+		}
+	}
     
 }
 

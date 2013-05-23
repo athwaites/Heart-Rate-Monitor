@@ -18,10 +18,10 @@ public class SessionData {
 	private long mElapsedTime = 0;
 	
 	/** Packets received in this session */
-	private long mPacketsReceived = 0;
+	private int mPacketsReceived = 0;
 	
 	/** Packets dropped in this session */
-	private long mPacketsDropped = 0;
+	private int mPacketsDropped = 0;
 	
 	/** Total packets in this session */
 	private long mTotalPackets = 0;
@@ -29,8 +29,11 @@ public class SessionData {
 	/** Current packet throughput */
 	private int mThroughput = 0;
 	
-	/** Heart rate data */
-	private TimestampedArray<Integer> mHR = new TimestampedArray<Integer>();
+	/** RR data */
+	private TimestampedArray<Integer> mRR = new TimestampedArray<Integer>();
+	
+	/** BPM data */
+	private TimestampedArray<Integer> mBPM = new TimestampedArray<Integer>();
 		
 	/** Received signal strength indicator data */
 	private TimestampedArray<Integer> mRSSI = new TimestampedArray<Integer>();
@@ -81,10 +84,10 @@ public class SessionData {
 		return mThroughput;
 	}
 	
-	/** Get the last HR */
-	public int getLastHR()
+	/** Get the last RR */
+	public int getLastRR()
 	{
-		Integer val = mHR.getLast();
+		Integer val = mRR.getLast();
 		
 		if (val == null) {
 			return 0;
@@ -93,6 +96,18 @@ public class SessionData {
 		return val;
 	}
 	
+	/** Get the last BPM */
+	public int getLastBPM()
+	{
+		Integer val = mBPM.getLast();
+		
+		if (val == null) {
+			return 0;
+		}
+		
+		return val;
+	}
+
 	/** Get the last RSSI */
 	public int getLastRSSI()
 	{
@@ -105,16 +120,28 @@ public class SessionData {
 		return val;
 	}
 	
-	/** Get the HRs */
-	public Integer[] getHRs()
+	/** Get the RRs */
+	public Integer[] getRRs()
 	{
-		return mHR.get().toArray(new Integer[0]);
+		return mRR.get().toArray(new Integer[0]);
+	}
+	
+	/** Get the RR times */
+	public Long[] getRRTimes()
+	{
+		return mRR.getTime().toArray(new Long[0]);
+	}
+	
+	/** Get the HRs */
+	public Integer[] getBPMs()
+	{
+		return mBPM.get().toArray(new Integer[0]);
 	}
 	
 	/** Get the HR times */
-	public Long[] getHRTimes()
+	public Long[] getBPMTimes()
 	{
-		return mHR.getTime().toArray(new Long[0]);
+		return mBPM.getTime().toArray(new Long[0]);
 	}
 	
 	/** Get the RSSIs */
@@ -153,13 +180,23 @@ public class SessionData {
 		return mReceivedPackets.getTime().toArray(new Long[0]);
 	}
 	
-	/** Add a new HR to the session data */
-	public void addHR(int curHR)
+	/** Add a new RR to the session data */
+	public void addRR(int curRR)
 	{
 		checkTimeLimit();
 		
 		if (mIsStarted) {
-			mHR.add(curHR);
+			mRR.add(curRR);
+		}
+	}
+	
+	/** Add a new BPM to the session data */
+	public void addBPM(int curBPM)
+	{
+		checkTimeLimit();
+		
+		if (mIsStarted) {
+			mBPM.add(curBPM);
 		}
 	}
 	
@@ -174,13 +211,13 @@ public class SessionData {
 	}
 	
 	/** Add the packets received */
-	public void addPacketsReceived(long packetsReceived)
+	public void addPacketsReceived(int packetsReceived)
 	{
 		checkTimeLimit();
 		
 		if (mIsStarted) {
 			// Add the number of received packets to the packet status data
-			mReceivedPackets.add((int)packetsReceived);
+			mReceivedPackets.add(packetsReceived);
 			
 			// Add the number of received packets to the counter
 			mPacketsReceived += packetsReceived;
@@ -192,13 +229,13 @@ public class SessionData {
 	}
 	
 	/** Add the packets dropped */
-	public void addPacketsDropped(long packetsDropped)
+	public void addPacketsDropped(int packetsDropped)
 	{
 		checkTimeLimit();
 		
 		if (mIsStarted) {
 			// Add the number of dropped packets to the packet status data
-			mDroppedPackets.add((int)packetsDropped);
+			mDroppedPackets.add(packetsDropped);
 			
 			// Add the number of dropped packets to the counter
 			mPacketsDropped += packetsDropped;
@@ -243,7 +280,8 @@ public class SessionData {
 		mThroughput = 0;
 		
 		// Clear arrays
-		mHR.clear();
+		mRR.clear();
+		mBPM.clear();
 		mRSSI.clear();
 		mReceivedPackets.clear();
 		mDroppedPackets.clear();

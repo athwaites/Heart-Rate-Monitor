@@ -19,7 +19,8 @@
 	<string name="UI_Time_Elapsed">Time Elapsed</string>
 	<string name="UI_Signal_Strength">Signal Strength</string>
 	<string name="Default_Value">--</string>
-	<string name="Heart_Rate_Units">bpm</string>
+	<string name="Data_RR_Units">ms</string>
+	<string name="Data_BPM_Units">bpm</string>
 	<string name="Time_Delimiter">:</string>
 	<string name="Signal_RSSI_Units">dBm</string>
 	<string name="Signal_Delimiter">/</string>

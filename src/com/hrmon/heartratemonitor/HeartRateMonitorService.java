@@ -78,6 +78,8 @@ public class HeartRateMonitorService extends Service {
         mSession = new SessionData();
         
         mManager = new SessionManager(mConnection, mSession);
+        
+        mManager.loadConfiguration(HeartRateMonitorService.this);
     }
 
     @Override

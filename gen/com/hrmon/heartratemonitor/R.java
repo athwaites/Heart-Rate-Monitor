@@ -8,6 +8,12 @@
 package com.hrmon.heartratemonitor;
 
 public final class R {
+    public static final class anim {
+        public static final int in_from_left=0x7f040000;
+        public static final int in_from_right=0x7f040001;
+        public static final int out_to_left=0x7f040002;
+        public static final int out_to_right=0x7f040003;
+    }
     public static final class attr {
     }
     public static final class drawable {
@@ -26,58 +32,67 @@ public final class R {
         public static final int ic_time=0x7f02000c;
     }
     public static final class id {
-        public static final int button_connection=0x7f05000a;
-        public static final int button_heart=0x7f050001;
-        public static final int button_signal=0x7f050004;
-        public static final int button_time=0x7f050007;
-        public static final int icon_heart=0x7f050002;
-        public static final int icon_signal=0x7f050005;
-        public static final int icon_time=0x7f050008;
-        public static final int status=0x7f05000b;
-        public static final int text_header=0x7f050000;
-        public static final int text_heart=0x7f050003;
-        public static final int text_signal=0x7f050006;
-        public static final int text_time=0x7f050009;
+        public static final int button_connection=0x7f06000f;
+        public static final int button_heart=0x7f060006;
+        public static final int button_signal=0x7f060009;
+        public static final int button_time=0x7f06000c;
+        public static final int icon_heart=0x7f060007;
+        public static final int icon_signal=0x7f06000a;
+        public static final int icon_time=0x7f06000d;
+        public static final int index_view_flipper=0x7f060001;
+        public static final int layout_hrdata=0x7f060003;
+        public static final int layout_main=0x7f060002;
+        public static final int layout_signaldata=0x7f060004;
+        public static final int status=0x7f060010;
+        public static final int text_header=0x7f060005;
+        public static final int text_heart=0x7f060008;
+        public static final int text_hello=0x7f060000;
+        public static final int text_signal=0x7f06000b;
+        public static final int text_time=0x7f06000e;
     }
     public static final class layout {
-        public static final int main=0x7f030000;
+        public static final int hrdata=0x7f030000;
+        public static final int index=0x7f030001;
+        public static final int main=0x7f030002;
+        public static final int signaldata=0x7f030003;
     }
     public static final class string {
-        public static final int ANT_Airplane_Mode=0x7f040005;
-        public static final int ANT_Disabled=0x7f040008;
-        public static final int ANT_Disabling=0x7f040007;
-        public static final int ANT_Enabling=0x7f040006;
-        public static final int ANT_Error=0x7f04000a;
-        public static final int ANT_In_Use=0x7f040009;
-        public static final int ANT_Not_Supported=0x7f040004;
-        public static final int ANT_Radio_Service_Required=0x7f040003;
-        public static final int Confirm_Pairing_Reset=0x7f040021;
-        public static final int Default_Value=0x7f040011;
-        public static final int Heart_Rate_Units=0x7f040012;
-        public static final int Negative_Response=0x7f040023;
-        public static final int Notify_Started=0x7f04000b;
-        public static final int Notify_Started_Body=0x7f04000c;
-        public static final int Positive_Response=0x7f040022;
-        public static final int Signal_Delimiter=0x7f040015;
-        public static final int Signal_RSSI_Units=0x7f040014;
-        public static final int Signal_Throughput_Units=0x7f040016;
-        public static final int Status_Closed=0x7f04001a;
-        public static final int Status_Connected=0x7f040019;
-        public static final int Status_Connecting=0x7f040018;
-        public static final int Status_Disconnected=0x7f040017;
-        public static final int Status_Error=0x7f04001f;
-        public static final int Status_Offline=0x7f04001b;
-        public static final int Status_Opened=0x7f04001e;
-        public static final int Status_Opening=0x7f04001c;
-        public static final int Status_Pairing_Reset=0x7f040020;
-        public static final int Status_Searching=0x7f04001d;
-        public static final int Time_Delimiter=0x7f040013;
-        public static final int UI_Connection=0x7f04000d;
-        public static final int UI_Heart_Rate=0x7f04000e;
-        public static final int UI_Signal_Strength=0x7f040010;
-        public static final int UI_Start=0x7f040001;
-        public static final int UI_Stop=0x7f040002;
-        public static final int UI_Time_Elapsed=0x7f04000f;
-        public static final int app_name=0x7f040000;
+        public static final int ANT_Airplane_Mode=0x7f050005;
+        public static final int ANT_Disabled=0x7f050008;
+        public static final int ANT_Disabling=0x7f050007;
+        public static final int ANT_Enabling=0x7f050006;
+        public static final int ANT_Error=0x7f05000a;
+        public static final int ANT_In_Use=0x7f050009;
+        public static final int ANT_Not_Supported=0x7f050004;
+        public static final int ANT_Radio_Service_Required=0x7f050003;
+        public static final int Confirm_Pairing_Reset=0x7f050022;
+        public static final int Data_BPM_Units=0x7f050013;
+        public static final int Data_RR_Units=0x7f050012;
+        public static final int Default_Value=0x7f050011;
+        public static final int Negative_Response=0x7f050024;
+        public static final int Notify_Started=0x7f05000b;
+        public static final int Notify_Started_Body=0x7f05000c;
+        public static final int Positive_Response=0x7f050023;
+        public static final int Signal_Delimiter=0x7f050016;
+        public static final int Signal_RSSI_Units=0x7f050015;
+        public static final int Signal_Throughput_Units=0x7f050017;
+        public static final int Status_Closed=0x7f05001b;
+        public static final int Status_Connected=0x7f05001a;
+        public static final int Status_Connecting=0x7f050019;
+        public static final int Status_Disconnected=0x7f050018;
+        public static final int Status_Error=0x7f050020;
+        public static final int Status_Offline=0x7f05001c;
+        public static final int Status_Opened=0x7f05001f;
+        public static final int Status_Opening=0x7f05001d;
+        public static final int Status_Pairing_Reset=0x7f050021;
+        public static final int Status_Searching=0x7f05001e;
+        public static final int Time_Delimiter=0x7f050014;
+        public static final int UI_Connection=0x7f05000d;
+        public static final int UI_Heart_Rate=0x7f05000e;
+        public static final int UI_Signal_Strength=0x7f050010;
+        public static final int UI_Start=0x7f050001;
+        public static final int UI_Stop=0x7f050002;
+        public static final int UI_Time_Elapsed=0x7f05000f;
+        public static final int app_name=0x7f050000;
     }
 }

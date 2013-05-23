@@ -42,6 +42,9 @@ public class ConnectionManager {
     {
         public void errorCallback();
         public void notifyAntStateChanged();
+        public void notifyNewRRData();
+        public void notifyNewBPMData();
+        public void notifyNewRSSIData(byte channel);
         public void notifyChannelStateChanged(byte channel);
         public void notifyChannelDataChanged(byte channel);
     }
@@ -88,12 +91,45 @@ public class ConnectionManager {
     /** ANT+ lib config flag for extended data with the Timestamp. */
     public static final byte LC_TIMESTAMP = (byte) 0x20;
     
+    /** ANT+ packet toggle bit mask */
+    public static final byte PKT_TOGGLE_MASK = (byte) 0x80;
+    
+    /** ANT+ packet offset for the packet length */
+    public static final int PKT_LENGTH = 0;
+    
+    /** ANT+ packet offset for the start of the payload */
+    public static final int PKT_PAYLOAD = 3;
+    
+    /** ANT+ packet offset for the data page number */
+    public static final int PKT_PAGE = PKT_PAYLOAD;
+    
+    /** ANT+ packet offset for the extended information */
+    public static final int PKT_EXT = 11;
+    
     //TODO: This string will eventually be provided by the system or by AntLib
     /** String used to represent ant in the radios list. */
     private static final String RADIO_ANT = "ant";
     
+    /**
+     * The possible HRM page toggle bit states.
+     */
+    public enum HRMPageState
+    {
+       /** Initialising (bit value not checked). */
+       PAGE_INIT,
+       
+       /** Standard page. */
+       PAGE_STD,
+       
+       /** Extended pages are valid. */
+       PAGE_EXT
+    }
+    
     /** The current HRM page/toggle bit state. */
-    private HRMStatePage mStateHRM = HRMStatePage.INIT;
+    private HRMPageState mStateHRM = HRMPageState.PAGE_INIT;
+    
+    /** The last HRM packet page. */
+    private static byte mLastPage;
     
     /** Description of ANT's current state */
     private String mAntStateText = "";
@@ -123,28 +159,51 @@ public class ConnectionManager {
     /** Current state of the HRM channel */
     private ChannelStates mHrmState = ChannelStates.CLOSED;
 
-    /** Last measured BPM form the HRM device */
-    private int mBPM = 0;
+    /** HRM Sensor Data Class */
+    private class HRMData {
+    	public short DeviceNumber;
+    	// Paged Data
+    	public int OperatingTime;
+    	public int ManufacturerID;
+    	public int SerialNumber;
+    	public int HardwareVersion;
+    	public int SoftwareVersion;
+    	public int ModelNumber;
+    	// Default Data
+        public int CurrentBeatCount;
+        public int PreviousBeatCount;
+        public int CurrentBeatTime;
+        public int PreviousBeatTime;
+        public int RR;
+        public int BPM;
+        public int RSSI;
+        // Stats
+        public int PacketsReceived;
+        public int PacketsDropped;
+    }
     
-    /** Last RSSI */
-    private int mRSSI = 0;
-    
-    /** Received packet count since get-request */
-    private long mPacketsReceived = 0;
-    
-    /** Dropped packet count since get-request */
-    private long mPacketsDropped = 0;
+    private HRMData mHRMData;
     
     /** Flag indicating that opening of the HRM channel was deferred */
     private boolean mDeferredHrmStart = false;
     
-    /** HRM device number. */
-    private short mDeviceNumberHRM;
-    
     /** Devices must be within this bin to be found during (proximity) search. */
     private byte mProximityThreshold;
     
-    private ChannelConfiguration channelConfig;
+    /** Channel Configuration Class */
+    private class ChannelConfiguration {
+        public short deviceNumber;
+        public byte deviceType;
+        public byte TransmissionType;
+        public short period;
+        public byte freq;
+        public byte proxSearch;
+
+        public boolean isInitializing = false;
+        public boolean isDeinitializing = false;
+    }
+    
+    private ChannelConfiguration mChannelConfig;
     
     //TODO You will want to set a separate threshold for screen off and (if desired) screen on.
     /** Data buffered for event buffering before flush. */
@@ -152,24 +211,6 @@ public class ConnectionManager {
     
 	/** Indicates if the application controls the ANT+ interface. */
 	private boolean mClaimedAntInterface;
-	
-    /**
-     * The possible HRM page toggle bit states.
-     */
-    public enum HRMStatePage
-    {
-       /** Toggle bit is 0. */
-       TOGGLE0,
-       
-       /** Toggle bit is 1. */
-       TOGGLE1,
-       
-       /** Initialising (bit value not checked). */
-       INIT,
-       
-       /** Extended pages are valid. */
-       EXT
-    }
 	
     /** Application context. */
     private Context mContext;
@@ -186,7 +227,8 @@ public class ConnectionManager {
 		// Initial states
 		mDeferredHrmStart = false;
         mHrmState = ChannelStates.CLOSED;
-        channelConfig = new ChannelConfiguration();
+        mHRMData = new HRMData();
+        mChannelConfig = new ChannelConfiguration();
 		
 		// Initialise ANT+ control flag to false
 		mClaimedAntInterface = false;
@@ -278,12 +320,12 @@ public class ConnectionManager {
 
     public short getDeviceNumberHRM()
     {
-        return mDeviceNumberHRM;
+        return mHRMData.DeviceNumber;
     }
 
     public void setDeviceNumberHRM(short deviceNumberHRM)
     {
-        this.mDeviceNumberHRM = deviceNumberHRM;
+        this.mHRMData.DeviceNumber = deviceNumberHRM;
     }
 
     public byte getProximityThreshold()
@@ -306,7 +348,7 @@ public class ConnectionManager {
         this.mBufferThreshold = bufferThreshold;
     }
     
-    public HRMStatePage getStateHRM()
+    public HRMPageState getStateHRM()
     {
         return mStateHRM;
     }
@@ -318,25 +360,30 @@ public class ConnectionManager {
 
     public int getBPM()
     {
-        return mBPM;
+        return mHRMData.BPM;
+    }
+    
+    public int getRR()
+    {
+        return mHRMData.RR;
     }
     
     public int getRSSI()
     {
-    	return mRSSI;
+    	return mHRMData.RSSI;
     }
     
-    public long getPacketsReceived()
+    public int getPacketsReceived()
     {
-    	long result = mPacketsReceived;
-    	mPacketsReceived = 0;
+    	int result = mHRMData.PacketsReceived;
+    	mHRMData.PacketsReceived = 0;
     	return result;
     }
     
-    public long getPacketsDropped()
+    public int getPacketsDropped()
     {
-    	long result = mPacketsDropped;
-    	mPacketsDropped = 0;
+    	int result = mHRMData.PacketsDropped;
+    	mHRMData.PacketsDropped = 0;
     	return result;
     }
 
@@ -579,12 +626,12 @@ public class ConnectionManager {
         mContext.startService(new Intent(mContext, HeartRateMonitorService.class));
         if (!deferToNextReset)
         {
-            channelConfig.deviceNumber = mDeviceNumberHRM;
-            channelConfig.deviceType = HRM_DEVICE_TYPE;
-            channelConfig.TransmissionType = 0; // Set to 0 for wild card search
-            channelConfig.period = HRM_PERIOD;
-            channelConfig.freq = 57; // 2457Mhz (ANT+ frequency)
-            channelConfig.proxSearch = mProximityThreshold;
+        	mChannelConfig.deviceNumber = mHRMData.DeviceNumber;
+        	mChannelConfig.deviceType = HRM_DEVICE_TYPE;
+        	mChannelConfig.TransmissionType = 0; // Set to 0 for wild card search
+        	mChannelConfig.period = HRM_PERIOD;
+        	mChannelConfig.freq = 57; // 2457Mhz (ANT+ frequency)
+        	mChannelConfig.proxSearch = mProximityThreshold;
             mHrmState = ChannelStates.PENDING_OPEN;
 
             if(mCallbackSink != null)
@@ -608,8 +655,8 @@ public class ConnectionManager {
      */
     public void closeChannel(byte channel)
     {
-        channelConfig.isInitializing = false;
-        channelConfig.isDeinitializing = true;
+    	mChannelConfig.isInitializing = false;
+    	mChannelConfig.isDeinitializing = true;
 
         mHrmState = ChannelStates.CLOSED;
 
@@ -934,7 +981,7 @@ public class ConnectionManager {
                      }
                      
                      // ANT received a message in the designated channel period
-                     mPacketsReceived++;
+                     mHRMData.PacketsReceived++;
                      
                      break;
                  case AntMesg.MESG_BURST_DATA_ID:
@@ -948,7 +995,7 @@ public class ConnectionManager {
                      short deviceNum = (short) ((ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 1]&0xFF | ((ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 2]&0xFF) << 8)) & 0xFFFF);
                      if(ANTRxMessage[AntMesg.MESG_DATA_OFFSET] == HRM_CHANNEL) {   //Switch on channel number
                          Log.i(TAG, "onRecieve: Received HRM device number");
-                         mDeviceNumberHRM = deviceNum;
+                         mHRMData.DeviceNumber = deviceNum;
                      }
                      break;
                  case AntMesg.MESG_VERSION_ID:
@@ -981,8 +1028,8 @@ public class ConnectionManager {
            if ((ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 1] == AntMesg.MESG_EVENT_ID) && (ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 2] == AntDefine.EVENT_RX_SEARCH_TIMEOUT))
            {
                // A channel timed out searching, unassign it
-               channelConfig.isInitializing = false;
-               channelConfig.isDeinitializing = false;
+               mChannelConfig.isInitializing = false;
+               mChannelConfig.isDeinitializing = false;
 
                if(channelNumber == HRM_CHANNEL) {
                    try
@@ -1008,10 +1055,10 @@ public class ConnectionManager {
            
            if ((ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 1] == AntMesg.MESG_EVENT_ID) && (ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 2] == AntDefine.EVENT_RX_FAIL)) {
         	   // ANT failed to receive a message in the designated channel period
-        	   mPacketsDropped++;
+        	   mHRMData.PacketsDropped++;
            }
            
-           if (channelConfig.isInitializing)
+           if (mChannelConfig.isInitializing)
            {
                if (ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 2] != 0) // Error response
                {
@@ -1024,7 +1071,7 @@ public class ConnectionManager {
                        case AntMesg.MESG_ASSIGN_CHANNEL_ID:
                            try
                            {
-                               mAntReceiver.ANTSetChannelId(channelNumber, channelConfig.deviceNumber, channelConfig.deviceType, channelConfig.TransmissionType);
+                               mAntReceiver.ANTSetChannelId(channelNumber, mChannelConfig.deviceNumber, mChannelConfig.deviceType, mChannelConfig.TransmissionType);
                            }
                            catch (AntInterfaceException e)
                            {
@@ -1034,7 +1081,7 @@ public class ConnectionManager {
                        case AntMesg.MESG_CHANNEL_ID_ID:
                            try
                            {
-                               mAntReceiver.ANTSetChannelPeriod(channelNumber, channelConfig.period);
+                               mAntReceiver.ANTSetChannelPeriod(channelNumber, mChannelConfig.period);
                            }
                            catch (AntInterfaceException e)
                            {
@@ -1044,7 +1091,7 @@ public class ConnectionManager {
                        case AntMesg.MESG_CHANNEL_MESG_PERIOD_ID:
                            try
                            {
-                               mAntReceiver.ANTSetChannelRFFreq(channelNumber, channelConfig.freq);
+                               mAntReceiver.ANTSetChannelRFFreq(channelNumber, mChannelConfig.freq);
                            }
                            catch (AntInterfaceException e)
                            {
@@ -1072,11 +1119,11 @@ public class ConnectionManager {
                            }
                            break;
                        case AntMesg.MESG_SET_LP_SEARCH_TIMEOUT_ID:
-                           if (channelConfig.deviceNumber == WILDCARD)
+                           if (mChannelConfig.deviceNumber == WILDCARD)
                            {
                                try
                                {
-                                   mAntReceiver.ANTSetProximitySearch(channelNumber, channelConfig.proxSearch);   // Configure proximity search, if using wild card search
+                                   mAntReceiver.ANTSetProximitySearch(channelNumber, mChannelConfig.proxSearch);   // Configure proximity search, if using wild card search
                                }
                                catch (AntInterfaceException e)
                                {
@@ -1106,7 +1153,7 @@ public class ConnectionManager {
                            }
                            break;
                        case AntMesg.MESG_OPEN_CHANNEL_ID:
-                           channelConfig.isInitializing = false;
+                    	   mChannelConfig.isInitializing = false;
                            if(channelNumber == HRM_CHANNEL) {
                                mHrmState = ChannelStates.SEARCHING;
                                if(mCallbackSink != null)
@@ -1115,7 +1162,7 @@ public class ConnectionManager {
                    }
                }
            }
-           else if (channelConfig.isDeinitializing)
+           else if (mChannelConfig.isDeinitializing)
            {
                if ((ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 1] == AntMesg.MESG_EVENT_ID) && (ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 2] == AntDefine.EVENT_CHANNEL_CLOSED))
                {
@@ -1130,7 +1177,7 @@ public class ConnectionManager {
                }
                else if ((ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 1] == AntMesg.MESG_UNASSIGN_CHANNEL_ID) && (ANTRxMessage[AntMesg.MESG_DATA_OFFSET + 2] == AntDefine.RESPONSE_NO_ERROR))
                {
-                   channelConfig.isDeinitializing = false;
+            	   mChannelConfig.isDeinitializing = false;
                }
            }
        }
@@ -1142,68 +1189,143 @@ public class ConnectionManager {
         */
        private void antDecodeHRM(byte[] ANTRxMessage)
        {
-         //TODO: Send the decoded data to the service to be recorded
-          Log.d(TAG, "antDecodeHRM start");
+    	   Log.d(TAG, "antDecodeHRM start");
           
-         Log.d(TAG, "antDecodeHRM: Received broadcast");
+    	   Log.d(TAG, "antDecodeHRM: Received broadcast");
          
-         if(mHrmState != ChannelStates.CLOSED)
-         {
-            Log.d(TAG, "antDecodeHRM: Tracking data");
+    	   if(mHrmState != ChannelStates.CLOSED)
+    	   {
+    		   Log.d(TAG, "antDecodeHRM: Tracking data");
 
-            mHrmState = ChannelStates.TRACKING_DATA;
-            if(mCallbackSink != null)
-                mCallbackSink.notifyChannelStateChanged(HRM_CHANNEL);
-         }
+    		   mHrmState = ChannelStates.TRACKING_DATA;
+    		   if(mCallbackSink != null)
+    			   mCallbackSink.notifyChannelStateChanged(HRM_CHANNEL);
+    	   }
 
-         if(mDeviceNumberHRM == WILDCARD)
-         {
-             try
-             {
-                 Log.i(TAG, "antDecodeHRM: Requesting device number");
-                 mAntReceiver.ANTRequestMessage(HRM_CHANNEL, AntMesg.MESG_CHANNEL_ID_ID);
-             }
-             catch(AntInterfaceException e)
-             {
-                 antError();
-             }
-         }
+    	   if(mHRMData.DeviceNumber == WILDCARD)
+    	   {
+    		   try
+    		   {
+    			   Log.i(TAG, "antDecodeHRM: Requesting device number");
+    			   mAntReceiver.ANTRequestMessage(HRM_CHANNEL, AntMesg.MESG_CHANNEL_ID_ID);
+    		   }
+    		   catch(AntInterfaceException e)
+    		   {
+    			   antError();
+    		   }
+    	   }
 
-         // Monitor page toggle bit
-         // TODO: Check this, it looks like the default code creates a terminal state in EXT once transitioned; not a problem if we're only after BPM since it's available on all state pages.
-         if(mStateHRM != HRMStatePage.EXT)
-         {
-            if(mStateHRM == HRMStatePage.INIT)
-            {
-               if((ANTRxMessage[3] & (byte) 0x80) == 0)
-                  mStateHRM = HRMStatePage.TOGGLE0;
-               else
-                  mStateHRM = HRMStatePage.TOGGLE1;
-            }
-            else if(mStateHRM == HRMStatePage.TOGGLE0)
-            {
-               if((ANTRxMessage[3] & (byte) 0x80) != 0)
-                  mStateHRM = HRMStatePage.EXT;
-            }
-            else if(mStateHRM == HRMStatePage.TOGGLE1)
-            {
-               if((ANTRxMessage[3] & (byte) 0x80) == 0)
-                  mStateHRM = HRMStatePage.EXT;
-            }
-         }
-         
-         // Extract RSSI from packet
-         mRSSI = (byte)(ANTRxMessage[13] & 0xFF);
-         
-         // Heart rate available in all pages and regardless of toggle bit            
-         mBPM = ANTRxMessage[10] & 0xFF;
-         
-         
-         if(mCallbackSink != null)
-             mCallbackSink.notifyChannelDataChanged(HRM_CHANNEL);
+    	   // Monitor page toggle bit
+    	   byte currentPage = (byte) ANTRxMessage[PKT_PAGE];
+    	   switch (mStateHRM) {
+    	   case PAGE_INIT:
+    		   mStateHRM = HRMPageState.PAGE_STD;
+    		   break;
+    	   case PAGE_STD:
+    		   if (currentPage == mLastPage) {
+    			   break;
+    		   }
+    		   // Intentionally fall through into PAGE_EXT if the page has changed
+    		   mStateHRM = HRMPageState.PAGE_EXT;
+    	   case PAGE_EXT:
+    		   switch (currentPage & ~PKT_TOGGLE_MASK) {
+    		   case 1:
+    			   // Decode the cumulative operating time
+    			   mHRMData.OperatingTime = (ANTRxMessage[PKT_PAYLOAD + 1] & 0xFF);
+    			   mHRMData.OperatingTime |= (ANTRxMessage[PKT_PAYLOAD + 2] & 0xFF) << 8;
+    			   mHRMData.OperatingTime |= (ANTRxMessage[PKT_PAYLOAD + 3] & 0xFF) << 16;
+    			   mHRMData.OperatingTime *= 2;
+    			   break;
+    		   case 2:
+    			   // Decode the Manufacturer ID
+    			   mHRMData.ManufacturerID = ANTRxMessage[PKT_PAYLOAD + 1];
+    			   // Decode the 4-byte Serial Number
+    			   mHRMData.SerialNumber = mHRMData.DeviceNumber;
+    			   mHRMData.SerialNumber |= (ANTRxMessage[PKT_PAYLOAD + 2] & 0xFF) << 16;
+    			   mHRMData.SerialNumber |= (ANTRxMessage[PKT_PAYLOAD + 3] & 0xFF) << 24;
+    			   break;
+    		   case 3:
+    			   // Decode the Hardware Version, Software Version and Model Number
+    			   mHRMData.HardwareVersion = (ANTRxMessage[PKT_PAYLOAD + 1] & 0xFF);
+    			   mHRMData.SoftwareVersion = (ANTRxMessage[PKT_PAYLOAD + 2] & 0xFF);
+    			   mHRMData.ModelNumber = (ANTRxMessage[PKT_PAYLOAD + 3] & 0xFF);
+    			   break;
+    		   case 4:
+    			   // Decode the previous heart beat measurement time
+//    			   mHRMData.PreviousBeatTime = (ANTRxMessage[PKT_PAYLOAD + 2] & 0xFF);
+//    			   mHRMData.PreviousBeatTime |= (ANTRxMessage[PKT_PAYLOAD + 3] & 0xFF) << 8;
+    			   break;
+    		   }
+    		   break;
+    	   }
+    	   
+    	   mLastPage = currentPage;
+    	   
+    	   antDecodeDefaultHRM(ANTRxMessage);
              
-          Log.d(TAG, "antDecodeHRM end");
-       }
+    	   Log.d(TAG, "antDecodeHRM end");
+       	}
+       
+       
+   		/**
+        * Decode Default ANT+ HRM messages.
+        *
+        * @param ANTRxMessage the received ANT message.
+        */
+       	private void antDecodeDefaultHRM(byte[] ANTRxMessage)
+       	{
+       		// Decode the beat time
+       		mHRMData.CurrentBeatTime = (ANTRxMessage[PKT_PAYLOAD + 4] & 0xFF);
+       		mHRMData.CurrentBeatTime |= (ANTRxMessage[PKT_PAYLOAD + 5] & 0xFF) << 8;
+           
+       		// Decode the beat count
+       		mHRMData.CurrentBeatCount = (ANTRxMessage[PKT_PAYLOAD + 6] & 0xFF);
+           
+       		// Heart rate            
+       		mHRMData.BPM = (ANTRxMessage[PKT_PAYLOAD + 7] & 0xFF);
+       		
+       		if (ANTRxMessage[PKT_LENGTH] > (PKT_EXT - 1)) {
+       			// Extended data exists in packet
+       			// Extract RSSI from packet
+       			mHRMData.RSSI = ANTRxMessage[PKT_EXT + 2];
+       			
+       			// Callback to notify arrival of new RSSI data
+           		if(mCallbackSink != null) {
+           			mCallbackSink.notifyNewRSSIData(HRM_CHANNEL);
+           		}
+       		}
+       		
+       		if (mHRMData.CurrentBeatCount != mHRMData.PreviousBeatCount) {
+       			// New beat has arrived
+       			
+           		// Callback to notify arrival of new BPM data
+           		if(mCallbackSink != null) {
+           			mCallbackSink.notifyNewBPMData();
+           		}
+           		
+       			if (((mHRMData.PreviousBeatCount + 1) & 0xFF) == mHRMData.CurrentBeatCount) {
+		   			// Confirmed one beat between intervals, accommodating for byte overflow, (can now obtain RR)
+		   			// RR interval
+       				if (mHRMData.CurrentBeatTime > mHRMData.PreviousBeatTime) {
+       					mHRMData.RR = (mHRMData.CurrentBeatTime - mHRMData.PreviousBeatTime);
+       				} else {
+       					// Overflow condition
+       					mHRMData.RR = (mHRMData.CurrentBeatTime + (0xFFFF - mHRMData.PreviousBeatTime));
+       				}
+       				// Convert result from 1/1024sec into milliseconds
+		       		mHRMData.RR = (int)((mHRMData.RR * 1000) / 1024);
+		       		
+		       		// Callback to notify arrival of new RR data
+		       		if(mCallbackSink != null) {
+		       			mCallbackSink.notifyNewRRData();
+		       		}
+		   		}
+       		}
+       		
+       		// Update the previous beat count and beat time
+       		mHRMData.PreviousBeatCount = mHRMData.CurrentBeatCount;
+       		mHRMData.PreviousBeatTime = mHRMData.CurrentBeatTime;
+       	}
     };
     
     /**
@@ -1215,8 +1337,8 @@ public class ConnectionManager {
     {
     	byte[] enableExt = new byte[4];
     	
-    	enableExt[0] = (byte) 2;
-    	enableExt[1] = (byte) 0x6e;			// Lib Config ID
+    	enableExt[0] = (byte) 2;			// Length
+    	enableExt[1] = (byte) 0x6e;			// Message ID
     	enableExt[2] = (byte) 0;			// Filler
     	enableExt[3] = (byte) libConfig;	// Lib Config value
     	
@@ -1240,8 +1362,8 @@ public class ConnectionManager {
     {
        try
        {
-           channelConfig.isInitializing = true;
-           channelConfig.isDeinitializing = false;
+    	   mChannelConfig.isInitializing = true;
+           mChannelConfig.isDeinitializing = false;
 
            // Configure ANT+ to send extended data with RSSI
            antLibConfig(LC_RSSI);
